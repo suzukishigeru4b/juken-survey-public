@@ -1,0 +1,423 @@
+<style>
+  html,
+  body
+  {
+    margin: 0;
+    height: auto;
+    background: #ccc;
+  }
+
+  input,
+  button,
+  select {
+    font-size: 1em;
+  }
+
+  h1 {
+    font-size: 1.5em;
+  }
+  
+  .header {
+    margin-bottom: 8px;
+    padding: 8px;
+    border-bottom: 1px solid #ccc;
+    background-color: aliceblue;
+  }
+
+  .header-title {
+    font-weight: bold;
+    border-left: 5px solid #ccc;
+    padding: 3px 0 3px 10px;
+    margin-top: 0;
+    margin-bottom: 8px;
+    background-color: aliceblue;
+  }
+
+  .footer {
+    color: #ccc;
+    border-top: 1px solid #ccc;
+    padding: 8px 0;
+  }
+
+  .status-message {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .button-alert-message {
+    color: red;
+  }
+
+  /* --- ダイアログ関連 --- */
+  dialog[open] {
+    margin-top: 150px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    /* これが「上寄せ」の指定 */
+    border: 2px solid #333;
+    /* 線の色は例として#333 (濃いグレー) */
+    border-radius: 10px;
+    gap: 8px;
+    padding: 8px;
+    /* ダイアログの内側の余白 */
+    min-width: 300px;
+    /* 見栄えのための最小幅（任意） */
+  }
+  dialog::backdrop {
+    /* background-color: rgba(0, 0, 0, 0.2); */
+    backdrop-filter: blur(2px); /* ぼかしの強さを指定 */
+    /* -webkit-backdrop-filter: blur(5px); */ 
+  }
+  .dialog-header {
+    background-color: AliceBlue;
+    padding: 10px;
+    border-radius: 5px;
+  }
+
+  .dialog-message-container {
+    display: flex;
+    padding: 0 16px 0 16px;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .confirm-dialog-button-area {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 10px;
+  }
+
+  .hidden {
+    display: none !important;
+  }
+
+  .span-spinner {
+    width: calc(1em - 6px);
+    height: calc(1em - 6px);
+    border-radius: 50%;
+    border: 3px solid #eee;
+    border-left-color: #1082ce;
+    /* アニメーションを1秒かけて実行 */
+    animation: spinner-rotation 0.8s linear infinite;
+  }
+
+  /* アニメーションの設定 */
+  @keyframes spinner-rotation {
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* --- 入力画面関連 --- */
+  .input-background {
+    padding: 16px;
+    box-sizing: border-box;
+    background: #ccc;
+    align-items: center;
+  }
+
+  .input-body {
+    margin: 0 auto;
+    background-color: #FFF;
+    padding: 16px;
+    max-width: 1200px;
+  }
+
+  .status-div {
+    display: flex;
+    justify-content: space-between;
+    margin-left: 8px;
+    margin-right: 8px;
+  }
+
+  .status-div-left,
+  .status-div-right {
+    display: flex;
+    gap: 8px;
+  }
+
+  .current-user-name {
+    margin-right: 8px;
+  }
+
+  .selector-section {
+    display: flex;
+    gap: 16px;
+  }
+
+  .class-select-div,
+  .number-select-div {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0 16px 16px;
+    align-items: center;
+  }
+
+  .input-table-container {
+    text-align: center;
+    overflow-x: auto;
+    flex: 1;
+  }
+
+  .selected-student {
+    text-align: right;
+    color: navy;
+    font-weight: bold;
+  }
+
+  /* --- 検索画面関連 --- */
+  .search-background {
+    display: none;
+    padding: 16px;
+    background: #ccc;
+    align-items: center;
+  }
+
+  .search-body {
+    max-width: 600px;
+    margin: 0 auto;
+    background-color: #FFFFFF;
+    padding: 16px;
+    align-items: center;
+  }
+
+  .search-area {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+  }
+
+  .input-frame {
+    width: 100%;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .search-keyword {
+    flex: 1;
+    max-width: 100%;
+  }
+
+  .search-caution {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .move-button {
+    margin: 0 8px;
+    font-size: 0.8em;
+  }
+
+  .search-table-div {
+    width: 100%;
+    align-items: center;
+  }
+
+  .search-table {
+    width: 100%;
+  }
+
+  /* --- 共通レイアウト --- */
+  .button-area {
+    display: flex;
+    justify-content: space-between;
+    margin: 10px 0;
+    gap: 20px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  table tr:nth-child(even) {
+    background-color: #eee;
+  }
+
+  .table-header-row {
+    background-color: aliceblue;
+  }
+
+  table {
+    width: 100%;
+  }
+
+  td,
+  th {
+    background-color: transparent;
+    padding: 0px 8px;
+  }
+
+  .text-center {
+    text-align: center;
+  }
+
+  .text-left {
+    text-align: left;
+  }
+
+  .td-flex {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    gap: 4px;
+  }
+
+  /* === 900px以下でレイアウト変更 === */
+  /* --- レスポンシブ対応 (画面幅 701px - 1140px) --- */
+  @media screen and (min-width: 701px) and (max-width: 1140px) {
+    body {
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .input-background {
+      padding: 0;
+    }
+
+    .input-table table { width: 100%; border-collapse: collapse; }
+
+    .input-table th,
+    .input-table td {
+      /* border: 1px solid #ccc;*/
+      padding: 0px 10px; }
+
+    /* 1. テーブルのデフォルト挙動をリセット */
+    .input-table table,
+    .input-table thead,
+    .input-table tbody,
+    .input-table tr,
+    .input-table td {
+      display: block;
+    }
+
+    /* 2. 行(tr)をグリッドコンテナにする */
+    .input-table tr {
+      display: grid;
+      /* 横に5列確保する (data1, 2+3, 4+5, 6, 7 の計5列) */
+      grid-template-columns: 1fr 7fr 4fr 1fr 2fr;
+      /* 縦に2行分の高さを確保する（data2と3、data4と5用） */
+      grid-template-rows: auto auto;
+      gap: 0; /* セル間の隙間（必要に応じて調整） */
+      padding: 4px 0px; /* 行ごとの間隔 */
+      border-bottom: 1px solid #ccc;
+    }
+
+    /* 3. 各セルの配置指定 */
+
+    /* 1列目: data1 (全行またぎ) */
+    .input-table th:nth-child(1),
+    .input-table td:nth-child(1) {
+      grid-column: 1;      /* 1列目に配置 */
+      grid-row: 1 / -1;    /* 最初から最後まで縦にぶち抜き */
+      display: flex;
+      flex-direction: column;  /* ラベルと値を縦に積む */
+      justify-content: center; /* 【重要】縦方向の中央揃え */
+      align-items: center;     /* 横方向の中央揃え（お好みで） */
+      text-align: center;      /* テキスト自体も中央揃え */
+    }
+
+    /* 2列目: data2 (上段) */
+    .input-table th:nth-child(2),
+    .input-table td:nth-child(2) {
+      grid-column: 2;      /* 2列目に配置 */
+      grid-row: 1;         /* 1行目 */
+      text-align: left;
+    }
+    /* 2列目: data3 (下段) */
+    .input-table th:nth-child(3),
+    .input-table td:nth-child(3) {
+      grid-column: 2;      /* 2列目に配置 */
+      grid-row: 2;         /* 2行目 */
+      text-align: left;
+    }
+
+    /* 3列目: data4 (上段) */
+    .input-table th:nth-child(4),
+    .input-table td:nth-child(4) {
+      grid-column: 3;      /* 3列目に配置 */
+      grid-row: 1;         /* 1行目 */
+      text-align: left;
+    }
+
+    /* 3列目: data5 (下段) */
+    .input-table th:nth-child(5),
+    .input-table td:nth-child(5) {
+      grid-column: 3;      /* 3列目に配置 */
+      grid-row: 2;         /* 2行目 */
+      text-align: left;
+    }
+
+    /* 4列目: data6 (全行またぎ) */
+    .input-table th:nth-child(6),
+    .input-table td:nth-child(6) {
+      grid-column: 4;      /* 4列目に配置 */
+      grid-row: 1 / -1;    /* 縦にぶち抜き */
+      display: flex;
+      flex-direction: column;  /* ラベルと値を縦に積む */
+      justify-content: center; /* 【重要】縦方向の中央揃え */
+      align-items: center;     /* 横方向の中央揃え（お好みで） */
+      text-align: center;      /* テキスト自体も中央揃え */
+    }
+
+    /* 5列目: data7 (全行またぎ) */
+    .input-table th:nth-child(7),
+    .input-table td:nth-child(7) {
+      grid-column: 5;      /* 5列目に配置 */
+      grid-row: 1 / -1;    /* 縦にぶち抜き */
+      display: flex;
+      flex-direction: column;  /* ラベルと値を縦に積む */
+      justify-content: center; /* 【重要】縦方向の中央揃え */
+      align-items: center;     /* 横方向の中央揃え（お好みで） */
+      text-align: center;      /* テキスト自体も中央揃え */
+    }
+  }
+
+  /* --- レスポンシブ対応 (画面幅 700px 以下) --- */
+  @media screen and (max-width: 700px) {
+    body {
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .input-background {
+      padding: 0;
+    }
+
+    table {
+      width: 100%;
+    }
+
+    .table-header-row {
+      display: none;
+      /* PC用のヘッダーは非表示 */
+    }
+
+    td {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+      width: 100%;
+      border-bottom: 1px solid #ccc;
+      /* 各項目を線で区切る */
+    }
+
+    tr:last-child td:last-child {
+      border-bottom: none;
+      /* 最後の行の最後のセルの下線は消す */       
+    }
+
+    .input-table td::before {
+      display: flex;
+      content: attr(data-label);
+      justify-content: flex-start;
+      font-weight: bold;
+      min-width: 100px;
+      /* ラベルの幅を確保 */
+    }
+  }
+</style>

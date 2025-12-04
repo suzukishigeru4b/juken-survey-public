@@ -1,0 +1,821 @@
+<script>
+  //--------------------------------------------------------------------------------
+  // グローバルの定義
+  //--------------------------------------------------------------------------------
+  let myMailAddress = '';
+  let userRole = '';
+  let inputEnable = false;
+  let studentMailAddress = '';
+  let STUDENT_DATA = {};
+  let EXAM_DATA = {};
+  let examMaxInputCount;
+  let examTypeOptions = [];
+  let resultOptions = [];
+  let teacherData = [];
+  let allStudentsData = [];
+  let currentStudentData = [];
+  let examDataList = [];
+
+  let universityCodeList = [];
+  let isItemChanged = false;
+  let isDeleted = false;
+  let isUniversityCodeLoading = false;
+
+  // ダイアログ (ブラウザ依存あり)
+  const confirmAsync = async (title, message) => {
+    document.getElementById("confirmDialogTitle").textContent = title;
+    document.getElementById("confirmDialogMessage").innerHTML = message; // HTMLで記述可
+    document.getElementById("confirmDialog").showModal();
+    return new Promise(resolve => {
+      const eventBase = flag => () => {
+        document.getElementById("confirmDialog").close();
+        document.getElementById("confirmDialogButtonYes").removeEventListener("click", okEvent);
+        document.getElementById("confirmDialogButtonNo").removeEventListener("click", cancelEvent);
+        resolve(flag);
+      };
+      const okEvent = eventBase(true);
+      const cancelEvent = eventBase(false);
+      document.getElementById("confirmDialogButtonYes").addEventListener("click", okEvent);
+      document.getElementById("confirmDialogButtonNo").addEventListener("click", cancelEvent);
+    });
+  }
+
+  //================================================================================
+  // UI STATE CONTROL
+  //================================================================================
+
+  function setElementHidden(elementId, flag) {
+    document.getElementById(elementId).classList.toggle('hidden', flag);
+  }
+
+  function setPdfButtonDisabled(flag) {
+      document.querySelectorAll('.button-pdf').forEach(btn => btn.disabled = flag);
+  }
+
+  function setSendButtonDisabled(flag) {
+      document.querySelectorAll('.button-send').forEach(btn => btn.disabled = flag);
+  }
+
+  function setExitButtonHidden(flag) {
+      document.querySelectorAll('.button-exit').forEach(btn => btn.classList.toggle('hidden', flag));
+  }
+
+  function setSendMessage(text) {
+      document.querySelectorAll('.button-alert-message').forEach(item => item.textContent = text);
+  }
+
+  //--------------------------------------------------------------------------------
+  // index.html特有の関数
+  //--------------------------------------------------------------------------------
+  function pageLoaded() {
+    window.onbeforeunload = null;
+    setDialogSpinner(" 受験データ取得中・・・");
+    setElementHidden('selectorSection', true)
+    setElementHidden('inputSection', true)
+    //setInputVisibility("hidden");
+    showProgressDialog(true);
+    google.script.run
+      .withSuccessHandler(onInitialDataReceived)
+      .withFailureHandler(error => {
+      console.error(error);
+      showProgressDialog(false); // くるくるを消す
+      confirmAsync("エラー", "処理に失敗しました。<br>時間をおいて再度試すか、先生に連絡してください。<br>詳細: " + error.message);
+      })
+    .getInitialData();
+  }
+
+  function onInitialDataReceived(strJSON) {
+    const allData = JSON.parse(strJSON);
+    myMailAddress = allData.myMailAddress;
+    STUDENT_DATA = allData.studentStructure;
+    EXAM_DATA = allData.examStructure;
+    userRole = allData.userRole,
+    examMaxInputCount = allData.examMaxCount;
+    examTypeOptions = allData.examTypeOptions;
+    resultOptions = allData.resultOptions;
+    teacherData = allData.teacherData;
+    currentStudentData = allData.studentData;
+    examDataList = allData.examData;
+    setEventListeners();
+    disableSendButton(true);
+
+    const headerTitleEl = document.getElementById("headerTitle")
+    headerTitleEl.textContent = allData.headerTitle;
+
+    if (allData.userRole == 'teacher') {
+      allStudentsData = allData.studentsData;
+      showProgressDialog(false);
+      setMyName("【教員モード】" + teacherData[1]);
+      disableReportButton(true);
+      showSelector();
+      setElementHidden('selectorSection', false);
+      setElementHidden("inputSection", true);
+      getUniversityDataList();
+    } else if (allData.userRole == 'student') {
+      inputEnable = allData.inputEnable;
+      if (inputEnable == false) {
+        showProgressDialog(false);
+        confirmAsync("情報", "現在、管理者により入力が禁止されています。");
+        return;
+      }
+      studentMailAddress = currentStudentData[STUDENT_DATA.MAIL_ADDR]
+      showProgressDialog(false);
+      setStudentData("targetStudentName");
+      setElementHidden('selectorSection', true);
+      setElementHidden('inputSection', false);
+      setInputTable();
+      getUniversityDataList();
+    } else {
+
+      showProgressDialog(false);
+      confirmAsync("警告", "入力が許可されていません。<br>管理者に問い合わせてください。");
+      return;
+    }
+  }
+
+  function setMyName(name) {
+    const myNameDiv = document.getElementById('currentUserName');
+    myNameDiv.textContent = name;
+  }
+
+  //--------------------------------------------------------------------------------
+  // 教員ページ生徒選択
+  //--------------------------------------------------------------------------------
+  function showSelector() {
+    const classes = Array.from(new Set(allStudentsData.map(arr => arr[STUDENT_DATA.CLASS])));
+    classes.sort(); // クラス名でソート
+    createClassSelector(classes);
+  }
+
+  function createClassSelector(arr) {
+    // クラス一覧リストボックス
+    const selClassDiv = document.getElementById('classSelectionContainer');
+    selClassDiv.replaceChildren(); // または selClassDiv.innerHTML = '';
+    const label = document.createTextNode('クラス： ');
+    selClassDiv.appendChild(label);
+    const selectEl = document.createElement('select');
+    selectEl.id = 'classSelect';
+    selectEl.addEventListener('change', createStudentList);
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = '選択';
+    defaultOption.selected = true;
+    defaultOption.disabled = false;
+    selectEl.appendChild(defaultOption);
+    arr.forEach(className => { // クラスのリストから <option> 要素を生成して追加
+      const option = document.createElement('option');
+      option.value = className;
+      option.textContent = className + '組';
+      selectEl.appendChild(option);
+    });
+    selClassDiv.appendChild(selectEl);
+  }
+  
+  function createStudentList() { // 選択されたクラスの生徒一覧生成
+    setElementHidden("inputSection", true);
+    const selClassId = document.getElementById('classSelect')
+    const selClass = selClassId.value;
+    const students = allStudentsData.filter(row => row[STUDENT_DATA.CLASS] == selClass);
+    const selNumDiv = document.getElementById('studentNumberSelectionContainer');
+    selNumDiv.replaceChildren();
+    const label = document.createTextNode('番号：氏名 ');
+    selNumDiv.appendChild(label);
+    const selectEl = document.createElement('select');
+    selectEl.id = 'studentSelectorInput';
+    selectEl.addEventListener('change', handleStudentSelect);
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = '選択';
+    defaultOption.selected = true;
+    defaultOption.disabled = false;
+    selectEl.appendChild(defaultOption);
+    students.forEach(student => {
+        const option = document.createElement('option');
+        option.value = student[STUDENT_DATA.MAIL_ADDR];
+        let strNum = ('0' + student[STUDENT_DATA.NUMBER] + '：').slice(-3);
+        option.textContent = strNum + student[STUDENT_DATA.NAME];
+        selectEl.appendChild(option);
+    });
+    selNumDiv.appendChild(selectEl);
+  }
+
+  async function handleStudentSelect() {
+    try {
+      if (isItemChanged && !await confirmAsync("確認", "変更を保存せずに移動してよろしいですか")) {
+          return;
+      }
+      const selectEl = document.getElementById('studentSelectorInput');
+      const mailAddr = selectEl.value;
+      if (mailAddr.length == 0) {
+          return;
+      }
+    
+      currentStudentData = allStudentsData.find(row => row[0] == mailAddr)
+      studentMailAddress= mailAddr;
+
+      setStudentData("targetStudentName");
+      getExamDataList()
+    } catch (e) {
+      console.error("error in handleStudentSelect", e);
+    }
+}
+
+  //--------------------------------------------------------------------------------
+  // その他
+  //--------------------------------------------------------------------------------
+  function setDialogSpinner(text) {
+    const idStatusMsg = document.getElementById("progressDialogMessage");
+    idStatusMsg.replaceChildren();
+    if (text.length) {
+      const spanSpinner = document.createElement("span");
+      spanSpinner.className = "span-spinner"
+      idStatusMsg.append(spanSpinner)
+      idStatusMsg.append(text)
+    }
+  }
+
+  function disableScroll(event) {
+    event.preventDefault();
+  }
+
+  function setInputVisibility(vis) {
+    document.getElementById("inputTableContainer").style.visibility = vis;
+  }
+
+  function showProgressDialog(vis) {
+    if (vis) {
+      document.getElementById("progressDialog").showModal(); // 削除の確認
+    } else {
+      document.getElementById("progressDialog").close(); // 削除の確認
+    }
+  }
+
+    //--------------------------------------------------------------------------------
+  // 大学コード取得
+  //--------------------------------------------------------------------------------
+  const universityMap = new Map;
+
+  function getUniversityDataList() {
+    isUniversityCodeLoading = true;
+    disableSearchButton(true);
+    setStatusMessage('大学コード取得中．．．')
+    google.script.run
+      .withSuccessHandler(onUniversityDataReceived)
+      .withFailureHandler(error => {
+        console.error(error);
+        showProgressDialog(false); // くるくるを消す
+        confirmAsync("エラー", "処理に失敗しました。<br>時間をおいて再度試すか、先生に連絡してください。<br>詳細: " + error.message);
+      })
+      .getUniversityDataList();
+  }
+
+  function onUniversityDataReceived(str) {
+    universityCodeList = JSON.parse(str);
+    universityCodeList.forEach(drow => universityMap.set(String(drow[0]), drow[1]));
+    isUniversityCodeLoading = false;
+    disableSearchButton(false);
+    setStatusMessage('');
+  }
+
+  function setStatusMessage(text) {
+    const idStatusMsg = document.getElementById("statusMessage");
+    idStatusMsg.innerHTML = '';
+    if (text.length) {
+      const spanSpinner = document.createElement("span");
+      spanSpinner.className = "span-spinner"
+      idStatusMsg.append(spanSpinner)
+      idStatusMsg.append(text)
+    }
+  }
+
+  function disableSearchButton(flag) {
+    const buttons = document.querySelectorAll('.search-button');
+    buttons.forEach(button => {
+      button.disabled = flag;
+    });
+    const texts = document.querySelectorAll('.university-code');
+    texts.forEach(text => {
+      text.disabled = flag;
+    });
+  }
+
+  function setEventListeners() {
+    // イベントリスナー:jukentable全体にリスナーを設定
+    const inputTableContainer = document.getElementById("inputTableContainer");
+    inputTableContainer.addEventListener('click', (event) => {
+      const target = event.target;
+      if (target.classList.contains('search-button')) {
+        const row = target.closest('tr'); // ボタンが所属する行を取得
+        const rank = row.querySelector('.rank-cell').textContent;
+        searchUniversityCode(rank);
+      }
+      if (target.classList.contains('clear-button')) {
+        const row = target.closest('tr');
+        const rank = row.querySelector('.rank-cell').textContent;
+        clearRow(rank);
+      }
+      if (target.classList.contains('proceed-radio')) {
+        onProceedRadioClicked(target);
+      }
+    });
+    inputTableContainer.addEventListener('change', (event) => {
+      const target = event.target;
+      setItemChanged();
+      if (target.classList.contains('university-code')) { // 大学コードが変更された
+        const row = target.closest('tr');
+        const rank = row.querySelector('.rank-cell').textContent;
+        setUniversityName('universityCode' + rank);
+      }
+    });
+    // 受験校テーブルのボタン
+    document.getElementById("sendFormButton1").addEventListener("click", sendExamData);
+    document.getElementById("sendFormButton2").addEventListener("click", sendExamData);
+    document.getElementById("issueReportButton1").addEventListener("click", requestReport);
+    document.getElementById("issueReportButton2").addEventListener("click", requestReport);
+    //document.getElementById("cancelButton1").addEventListener("click", showSelector);
+    //document.getElementById("cancelButton2").addEventListener("click", showSelector);
+    // searchtable全体にリスナーを設定
+    const searchTableDiv = document.getElementById('searchTableContainer');
+    searchTableDiv.addEventListener('click', (event) => {
+      const target = event.target;
+      if (target.classList.contains('select-button')) {
+        const row = target.closest('tr');
+        const dcode = row.dataset.dcode
+        setUniversityCode(dcode);
+      }
+    });
+    // 検索テーブルのボタン
+    document.getElementById("searchButton").addEventListener("click", () => { displayStart = 0; searchKeyword(); }); // 先頭から表示
+    document.getElementById("keywordInput").addEventListener("input", () => { displayStart = 0; searchKeyword(); }); // 先頭から表示
+    document.getElementById('moveLeftButton').addEventListener('click', () => { displayStart -= displayStep; searchKeyword(); }) // 前のページへ
+    document.getElementById('moveRightButton').addEventListener('click', () => { displayStart += displayStep; searchKeyword(); }); // 次のページへ
+    document.getElementById("cancelButton").addEventListener("click", cancelSearch);
+    document.getElementById('searchBackground').addEventListener('click', cancelSearch);
+    document.getElementById('searchBody').addEventListener('click', (event) => { event.stopPropagation(); });
+    // スクロール位置の取得
+    window.addEventListener('scroll', () => { currentY = window.scrollY; currentX = window.scrollX; });
+  }
+
+  //--------------------------------------------------------------------------------
+  // 入力用テーブル関連
+  //--------------------------------------------------------------------------------
+  let selectedProceedRadioId = ""; // 選択されている進学先ラジオボタンのID
+
+  function setStudentData(id) {
+    let str = '';
+    str += currentStudentData[STUDENT_DATA.GRADE];
+    str += '年 ';
+    str += currentStudentData[STUDENT_DATA.CLASS];
+    str += '組 ';
+    str += currentStudentData[STUDENT_DATA.NUMBER];
+    str += '番 氏名 ';
+    str += currentStudentData[STUDENT_DATA.NAME];
+    document.getElementById(id).textContent = str;
+  }
+
+  function disableReportButton(flag) {
+    document.getElementById("issueReportButton1").disabled = flag;
+    document.getElementById("issueReportButton2").disabled = flag;
+
+  }
+  function disableSendButton(flag) {
+    document.getElementById("sendFormButton1").disabled = flag;
+    document.getElementById("sendFormButton2").disabled = flag;
+  }
+
+  function setSendMessage(text) {
+    document.getElementById("sendFormButton1Message").textContent = text;
+    document.getElementById("sendFormButton2Message").textContent = text;
+  }
+
+  // 入力用テーブル生成
+  function setInputTable() {
+    // テーブル本体
+    const template = document.getElementById('examRowTemplate');
+    const tableBody = document.createElement('tbody');
+
+    for (let i = 0; i < examMaxInputCount; i++) {
+      const rowClone = template.content.cloneNode(true);
+      const hasData = i < examDataList.length;
+      const jukenItem = hasData ? examDataList[i] : null; // データがあれば取得、なければnull
+      const dcode = rowClone.querySelector('.university-code');
+      const dname = rowClone.querySelector('.university-name');
+      const keitaiCell = rowClone.querySelector('.exam-type-select-cell');
+      const gouhiCell = rowClone.querySelector('.result-select-cell');
+      const shingakuRadio = rowClone.querySelector('.proceed-radio');
+      const searchBtn = rowClone.querySelector('.search-button');
+      const clearBtn = rowClone.querySelector('.clear-button');
+      rowClone.querySelector('.rank-cell').textContent = i + 1;
+      dcode.id = 'universityCode' + (i + 1);
+      dname.id = 'universityName' + (i + 1);
+      shingakuRadio.id = 'proceed' + (i + 1);
+      searchBtn.id = 'searchButton' + (i + 1);
+      clearBtn.id = 'deleteButton' + (i + 1);
+      if (hasData) {
+        dcode.value = jukenItem[EXAM_DATA.DAIGAKU_CODE];
+        dname.textContent = jukenItem[EXAM_DATA.DAIGAKU_NAME];
+        keitaiCell.appendChild(createExamTypeSelect(i, jukenItem[EXAM_DATA.KEITAI]));
+        gouhiCell.appendChild(createResultSelect(i, jukenItem[EXAM_DATA.GOUHI]));
+        if (jukenItem[EXAM_DATA.SHINGAKU] === true) {
+          shingakuRadio.checked = true;
+          selectedProceedRadioId = shingakuRadio.id;
+        }
+      } else {
+        keitaiCell.appendChild(createExamTypeSelect(i, ""));
+        gouhiCell.appendChild(createResultSelect(i, ""));
+      }
+      tableBody.appendChild(rowClone);
+    }
+    const tr = document.createElement("tr");
+    tr.classList.add("thead-row");
+    tr.classList.add("table-header-row");
+    // ヘッダーの配列
+    const headers = [
+      "No",
+      "大学コード",
+      "学校名・学部・学科・方式・日程",
+      "試験形態",
+      "合否",
+      "進学",
+      "削除"
+    ];
+    headers.forEach((text, i) => {
+      const th = document.createElement("th");
+      th.textContent = text;
+      tr.appendChild(th);
+    });
+    const tHead = document.createElement('thead');
+    tHead.appendChild(tr);
+    const table = document.createElement('table');
+    table.classList.add('input-table');
+    table.appendChild(tHead);
+    table.appendChild(tableBody);
+    const inputTableContainer = document.getElementById("inputTableContainer");
+    inputTableContainer.replaceChildren();
+    inputTableContainer.appendChild(table);
+  }
+
+  function checkDuplicate(inputId) {
+    const input = document.getElementById(inputId)
+    for (let i = 0; i < examMaxInputCount; i++) {
+      let id = 'universityCode' + (i + 1);
+      const ddata = document.getElementById(id);
+      if (ddata != input) {
+        if (input.value.trim() == ddata.value.trim()) {
+          return i + 1;
+        }
+      }
+    }
+    return 0;
+  }
+
+  function setUniversityName(dn) {
+    const dcodeSpan = document.getElementById(dn);
+    const dcode = dcodeSpan.value.trim();
+    const dnameSpan = document.getElementById(dn.replace('universityCode', 'universityName'));
+
+    if (dcode.length == 0) {
+      dnameSpan.innerHTML = '';
+      return;
+    }
+    const row = checkDuplicate(dn);
+    if (row > 0) {
+      dnameSpan.innerHTML = `<span style="color:red;">${dcode}は志望校${row}と重複しています</span>`;
+      dcodeSpan.value = ''; // 不正なコードをクリア              
+      return;
+    }
+    const dname = universityMap.get(dcode);
+    if (dname) {
+      dnameSpan.textContent = dname;
+    } else {
+      dnameSpan.innerHTML = `<span style="color:red;">コードに誤りがあります</span>`;
+      dcodeSpan.value = ''; // 不正なコードをクリア
+    }
+  }
+
+  function createExamTypeSelect(i, selectedValue) {
+    const select = document.createElement('select');
+    select.name = 'examType' + (i + 1);
+    select.id = 'examType' + (i + 1);
+
+    examTypeOptions.forEach(optionValue => {
+      const option = document.createElement('option');
+      option.value = optionValue;
+      option.textContent = optionValue;
+      if (optionValue === selectedValue) {
+        option.selected = true;
+      }
+      select.appendChild(option);
+    });
+    return select;
+  }
+
+  function createResultSelect(i, selectedValue) {
+    const select = document.createElement('select');
+    select.name = 'result' + (i + 1);
+    select.id = 'result' + (i + 1);
+
+    resultOptions.forEach(optionValue => {
+      const option = document.createElement('option');
+      option.value = optionValue;
+      option.textContent = optionValue;
+      if (optionValue === selectedValue) {
+        option.selected = true;
+      }
+      select.appendChild(option);
+    });
+    return select;
+  }
+
+  async function clearRow(i) {
+    let result = await confirmAsync("削除/復元", "志望校 " + i + " を変更しますか？");
+    if (result) {
+      const idc = document.getElementById("universityCode" + i);
+      const idb = document.getElementById("searchButton" + i);
+      const idn = document.getElementById("universityName" + i);
+      const idk = document.getElementById("examType" + i);
+      const idr = document.getElementById("result" + i);
+      const ids = document.getElementById("proceed" + i);
+      const arrid = [idc, idb, idn, idk, idr, ids];
+      const idd = document.getElementById("deleteButton" + i);
+      if (idk.disabled == false) { // idc, idnは大学コード読み込み前は disable
+        arrid.forEach(id => {
+          id.disabled = true;
+          id.style.textDecoration = "line-through";
+          id.style.opacity = 0.6;
+        });
+        idd.textContent = "戻す";
+      } else {
+        arrid.forEach(id => {
+          id.disabled = false;
+          id.style.textDecoration = "none";
+          id.style.opacity = 1;
+          //id.style.color = "#000";
+          //id.style.backgroundColor = "#FFF";
+        });
+        idd.textContent = "削除";
+      }
+      setItemChanged();
+    }
+  }
+
+  function onProceedRadioClicked(radioItem) {
+    if (radioItem.id == selectedProceedRadioId) {
+      radioItem.checked = false; // 選択を解除
+      selectedProceedRadioId = ""; // 選択状態をクリア
+      setItemChanged();
+    } else {
+      selectedProceedRadioId = radioItem.id;
+    }
+  }
+
+  function setItemChanged() {
+    if (!isItemChanged) {
+      isItemChanged = true;
+      disableSendButton(false);
+      disableReportButton(true);
+      setSendMessage('変更有→')
+      window.onbeforeunload = function (e) {
+        e.returnValue = "変更を保存せずに移動します。よろしいですか？";
+      }
+    }
+  }
+  //--------------------------------------------------------------------------------
+  // 大学コードテーブル関連
+  //--------------------------------------------------------------------------------
+  let currentRow = 0; // 大学検索を呼び出した行
+  let currentY = 0; //現在のスクロール位置
+  let currentX = 0;
+  let inputPosY = 0; // inputテーブル現在のスクロール位置
+  let inputPosX = 0;
+  let searchPosY = 0; // inputテーブル現在のスクロール位置
+  let searchPosX = 0;
+
+  function toggleSearchDisplay(flag) {
+    if (flag) {
+      inputPosY = currentY;
+      inputPosX = currentX;
+      window.scrollTo(searchPosX, searchPosY);
+      document.getElementById("searchBackground").style.display = "block";
+      document.getElementById("inputBackground").style.display = "none";
+    } else {
+      searchPosY = currentY;
+      searchPosX = currentX;
+      window.scrollTo(inputPosX, inputPosY);
+      document.getElementById("searchBackground").style.display = "none";
+      document.getElementById("inputBackground").style.display = "block";
+    }
+  }
+
+  function searchUniversityCode(row) {
+    currentRow = row;
+    toggleSearchDisplay(true);
+    displayStart = 0;
+    searchKeyword();
+  }
+
+  // 最後の入力から指定時間後に処理を実行する「デバウンス」関数
+  let debounceTimer;
+
+  function debounce(func, delay) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(func, delay);
+  }
+
+  let displayStart = 0;
+  const displayStep = 50;
+
+  function searchKeyword() {
+    // デバウンス処理を挟む
+    debounce(() => {
+      const keywordInput = document.getElementById("keywordInput").value;
+      const keywords = keywordInput.replace(/　/g, ' ').split(' ').filter(kw => kw); // 空のキーワードを除外
+      const dcTotal = document.getElementById("displayCountTotal");
+      const dcRange = document.getElementById("displayCountRange");
+      const resultsContainer = document.getElementById("searchTableContainer");
+      resultsContainer.replaceChildren(); // 前回の検索結果をクリア
+      const filteredData = universityCodeList.filter(row =>
+        keywords.every(kw => row[1].includes(kw) || String(row[0]).includes(kw))
+      );
+      const limitedData = filteredData.slice(displayStart, displayStart + displayStep);
+      const total = filteredData.length;
+      const moveLeft = document.getElementById('moveLeftButton');
+      const moveRight = document.getElementById('moveRightButton');
+      moveLeft.disabled = (displayStart <= 0);
+      moveRight.disabled = (displayStart + displayStep >= total);
+      const dend = total > displayStart + displayStep ? displayStart + displayStep : total
+      dcRange.textContent = ` ${displayStart + 1} ～ ${dend} `;
+      dcTotal.textContent = ` ／ ${total} 件`;
+      // 2. 検索結果テーブルの作成
+      const table = document.createElement('table');
+      table.classList.add('search-table');
+      // テーブルヘッダーの作成
+      const tableHead = table.createTHead();
+      const headerRow = tableHead.insertRow();
+      headerRow.classList.add('table-header-row');
+      const headers = ['学校名・学部・学科・入試方式・日程', '大学コード', '選択'];
+      headers.forEach(text => {
+        const th = document.createElement('th');
+        th.textContent = text;
+        headerRow.appendChild(th);
+      });
+      const tableBody = table.createTBody();
+      tableBody.id = "searchTable";
+      limitedData.forEach(dataRow => {
+        const code = dataRow[0];
+        const name = dataRow[1];
+        const tr = tableBody.insertRow();
+        tr.classList.add("result-row");
+        tr.dataset.dcode = dataRow[0];
+        tr.dataset.dname = dataRow[1];
+        // 学校名セル
+        const nameCell = tr.insertCell();
+        nameCell.textContent = name;
+        nameCell.dataset.label = "学校名等："; // レスポンシブ対応のラベル
+        // 大学コードセル
+        const codeCell = tr.insertCell();
+        codeCell.dataset.label = "コード：";
+        codeCell.classList.add("text-center");
+        const codeInput = document.createElement('input');
+        codeInput.type = 'text';
+        codeInput.value = code;
+        codeInput.readOnly = true;
+        codeInput.size = 10;
+        codeCell.appendChild(codeInput);
+        // 選択ボタンセル
+        const buttonCell = tr.insertCell();
+        buttonCell.classList.add("text-center");
+        const selectButton = document.createElement('input');
+        selectButton.type = 'button';
+        selectButton.value = '選択';
+        selectButton.classList.add("select-button");
+        buttonCell.appendChild(selectButton);
+      });
+      resultsContainer.appendChild(table);
+    }, 1000);
+  }
+
+  function setUniversityCode(dcode) {
+    const dcodeSpan = document.getElementById('universityCode' + currentRow);
+    dcodeSpan.value = String(dcode);
+    setUniversityName('universityCode' + currentRow);
+    setItemChanged();
+    cancelSearch(); // 検索画面を閉じる
+  }
+
+  function cancelSearch() {
+    toggleSearchDisplay(false);
+  }
+
+  //--------------------------------------------------------------------------------
+  // データ送信
+  //--------------------------------------------------------------------------------
+  let isReloadRequired;
+
+  async function sendExamData() {
+    if (!isItemChanged) return;
+    window.onbeforeunload = null;
+    let result = await confirmAsync("データの保存", "データを送信しますか？");
+    if (!result) return;
+    setDialogSpinner(" 受験データ送信中・・・")
+    showProgressDialog(true);
+    disableSendButton(true);
+    disableReportButton(false);
+    examDataList.length = 0;
+    isReloadRequired = false;
+    for (let i = 0; i < examMaxInputCount; i++) {
+      const dcode = document.getElementById('universityCode' + (i + 1)).value;
+      const isDelete = document.getElementById('examType' + (i + 1)).disabled;
+      if (isDelete) isReloadRequired = true;
+      if (dcode || dcode.length > 0) {
+        let rowData = [];
+        rowData[EXAM_DATA.TIME_STAMP] = '';
+        rowData[EXAM_DATA.MAIL_ADDR] = currentStudentData[0];
+        rowData[EXAM_DATA.DEL_FLAG] = isDelete;
+        rowData[EXAM_DATA.DAIGAKU_CODE] = String(dcode);
+        rowData[EXAM_DATA.DAIGAKU_NAME] = universityMap.get(String(dcode));
+        rowData[EXAM_DATA.GOUHI] = document.getElementById('result' + (i + 1)).value;
+        rowData[EXAM_DATA.KEITAI] = document.getElementById('examType' + (i + 1)).value;
+        rowData[EXAM_DATA.SHINGAKU] = document.getElementById('proceed' + (i + 1)).checked;
+        examDataList.push(rowData);
+      } else {
+        document.getElementById('universityName' + (i + 1)).textContent = '';
+      }
+    }
+    const strJuken = JSON.stringify(examDataList);
+    google.script.run
+      .withSuccessHandler(onExamDataSent)
+      .withFailureHandler(error => {
+        console.error(error);
+        showProgressDialog(false); // くるくるを消す
+        confirmAsync("エラー", "処理に失敗しました。<br>時間をおいて再度試すか、先生に連絡してください。<br>詳細: " + error.message);
+      })
+      .saveExamDataList(strJuken, studentMailAddress);
+  }
+
+  function onExamDataSent() {
+    setSendMessage('');
+    isItemChanged = false;
+    disableSendButton(true);
+    showProgressDialog(false);
+    if (isReloadRequired) {
+      getExamDataList();
+    }
+  }
+
+  function getExamDataList() {
+    setDialogSpinner(" 受験データ取得中・・・");
+    showProgressDialog(true);
+    setSendMessage('');
+    isItemChanged = false;
+    showProgressDialog(true);
+    google.script.run
+      .withSuccessHandler(onExamDataReceived)
+      .withFailureHandler(error => {
+        console.error(error);
+        showProgressDialog(false); // くるくるを消す
+        confirmAsync("エラー", "処理に失敗しました。<br>時間をおいて再度試すか、先生に連絡してください。<br>詳細: " + error.message);
+      })
+      .getExamDataList(studentMailAddress)
+  }
+
+  function onExamDataReceived(strJSON) {
+    isDeleted = false;
+    examDataList = JSON.parse(strJSON)
+    showProgressDialog(false);
+    disableReportButton(false);
+    //setElementHidden("selectorSection", true);
+    setElementHidden("inputSection", false);
+    setInputTable();
+    //setInputVisibility("visible");
+    if (isUniversityCodeLoading == false) disableSearchButton(false);
+  }
+
+  //--------------------------------------------------------------------------------
+  // 調査書発行願
+  //--------------------------------------------------------------------------------
+  async function requestReport() {
+    let result = await confirmAsync("メール送信", myMailAddress + "<br />に発行願を送信しますか？");
+    if (!result) return;
+    setDialogSpinner(" PDF作成中・・・");
+    showProgressDialog(true);
+    google.script.run
+      .withSuccessHandler(onReportCreated)
+      .withFailureHandler(error => {
+        console.error(error);
+        showProgressDialog(false); // くるくるを消す
+        confirmAsync("エラー", "処理に失敗しました。<br>時間をおいて再度試すか、先生に連絡してください。<br>詳細: " + error.message);
+      })
+      .sendPdf(studentMailAddress);
+  }
+
+  function onReportCreated() {
+    showProgressDialog(false);
+  }
+
+  //--------------------------------------------------------------------------------
+  // エントリーポイント
+  //--------------------------------------------------------------------------------
+  window.onload = pageLoaded;
+
+</script>
