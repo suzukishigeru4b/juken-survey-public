@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="ja">
 <head>
   <base target="_top">
+  <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <?!= HtmlService.createHtmlOutputFromFile('css').getContent(); ?>
+  <?!= include('css.html'); ?>
 </head>
 
 <body>
@@ -47,11 +47,13 @@
           </div>
         </div>
       </section>
-
+      <footer class="copyright">
+        <small>&copy; 2025 Shigeru Suzuki. All rights reserved.</small>
+      </footer>
     </div>
   </div>
 
-  <div id="searchBackground" class="search-background">
+  <div id="searchBackground" class="search-background is-hidden">
     <div id="searchBody" class="search-body">
       <div class="header">
         <h1 class="header-title">大学検索</h1>
@@ -60,15 +62,15 @@
         <div class="input-frame">
           <span class="search-label">検索語：</span>
           <input type="text" id="keywordInput" class="search-keyword">
-          <input type="button" id="searchButton" value="検索" class="action-button">
-          <input type="button" id="cancelButton" value="閉じる" class="action-button">
+          <button id="searchButton" class="action-button">検索</button>
+          <button id="cancelButton" class="action-button">閉じる</button>
         </div>
       </div>
       <div class="search-caution">
-        <input type="button" id="moveLeftButton" value="＜" class="move-button" disabled>
+        <button id="moveLeftButton" class="move-button" disabled>＜</button>
         <span id="displayCountRange"></span>
         <span id="displayCountTotal"></span>
-        <input type="button" id="moveRightButton" value="＞" class="move-button" disabled>
+        <button id="moveRightButton" class="move-button" disabled>＞</button>
       </div>
       <hr>
       <div id="searchTableContainer" class="search-table-div">
@@ -82,7 +84,7 @@
     <div class="dialog-header">
       <div class="dialog-title">処理中</div>
     </div>
-    <div id="progressDialogMessage" class="dialog-message-container">
+    <div id="progressDialogMessageContainer" class="dialog-message-container">
       通信中．．．お待ちください。
     </div>
   </dialog>
@@ -91,7 +93,8 @@
     <div class="dialog-header">
       <div id="confirmDialogTitle"></div>
     </div>
-    <div id="confirmDialogMessage" class="dialog-message-container">
+    <div id="confirmDialogMessageContainer" class="dialog-message-container">
+      <div id="confirmDialogMessage"></div>
     </div>
     <div id="confirmDialogButtonArea" class="confirm-dialog-button-area">
       <input type="button" id="confirmDialogButtonYes" value="はい">
@@ -105,21 +108,23 @@
       <td data-label="大学コード：" class="text-center">
         <div class="td-flex">
           <input type="text" name="dc" class="university-code" size="10" disabled>
-          <input type="button" value="検索" name="db" class="search-button" disabled>
+          <button class="search-button" disabled>検索</button>
         </div>
       </td>
       <td data-label="大学学部等：" class="text-left"><span class="university-name"></span></td>
       <td data-label="　受験形態：" class="text-center exam-type-select-cell"></td>
       <td data-label="　　　合否：" class="text-center result-select-cell"></td>
-      <td data-label="　　　進学：" class="text-center">
-        <input type="radio" name="rShingaku" class="proceed-radio">
+      <td data-label="　　　進学：" class="text-center td-radio">
+        <label class="radio-label">
+          <input type="radio" name="rShingaku" class="proceed-radio">
+        </label>
       </td>
       <td data-label="　　　削除：" class="text-center not-change">
         <button type="button" class="clear-button">削除</button>
       </td>
     </tr>
   </template>
-  <?!= HtmlService.createHtmlOutputFromFile('script').getContent(); ?>
+  <?!= include('script.html'); ?>
 </body>
 
 </html>
