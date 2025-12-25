@@ -84,7 +84,7 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 
 ### 必須要件
 
-- ✅ **Google アカウント** (Google Workspace 推奨)
+- ✅ **Google アカウント** (Google Workspace 必須)
 - ✅ **Google Chrome** (最新版)
 
 ### 推奨環境
@@ -204,3 +204,4 @@ copies or substantial portions of the Software.
 **Made with ❤️ for Education**
 
 </div>
+
