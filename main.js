@@ -1,6 +1,6 @@
 /**
  * 受験校調査システム (Preferred school survey system)
- * Version 1.0.0
+ * Version 2.0.0
  * * Copyright (c) 2025 Shigeru Suzuki
  * * Released under the MIT License.
  * https://opensource.org/licenses/MIT
@@ -85,7 +85,6 @@ const BENESSE_DATA = {
 // Webアプリとしてのエントリポイント (doGet)
 function doGet(e) {
   const settings = getSettings();
-  //console.log(settings)
   const htmlTemplate = HtmlService.createTemplateFromFile('index');
   const html = htmlTemplate.evaluate();
   html.setTitle(settings.pageTitle);
@@ -145,8 +144,8 @@ function getInitialData() {
     // データの抽出 (値がない場合は空配列)
     const examTypeOptions = (valueRanges[0].values || []).map(row => {
       let examType = row[0]
-      if(!examType) examType = '';
-      return examType; 
+      if (!examType) examType = '';
+      return examType;
     });
     const resultOptions = (valueRanges[1].values || []).map(row => {
       let result = row[0];
@@ -256,6 +255,23 @@ function getUniversityDataList() {
   }
 }
 
+function getFilteredUniversityDataList(searchWord, start, limit) {
+  const data = getUniversityDataApi() || [];
+  const keywords = searchWord.replace(/　/g, ' ').split(' ').filter(kw => kw);
+  const filteredData = [];
+  for (let row of data) {
+    if (keywords.every(kw => (row[1] || "").includes(kw) || String(row[0] || "").includes(kw))) {
+      filteredData.push(row);
+      continue;
+    }
+  }
+  return JSON.stringify({
+    total: filteredData.length,
+    data: filteredData.slice(start, start + limit)
+  });
+}
+
+
 // 受験データのみの送信 (更新後など) - API使用
 function getExamDataList(mailAddr = myMailAddress) {
   try {
@@ -266,14 +282,13 @@ function getExamDataList(mailAddr = myMailAddress) {
     const allExamData = response.values || [];
 
     // フィルタリング
-    // フィルタリング
-    const examData = allExamData.filter(row => row[EXAM_DATA.MAIL_ADDR] == mailAddr && String(row[EXAM_DATA.DEL_FLAG]).toUpperCase() !== "TRUE"); // Boolean比較修正: APIからの文字列"TRUE"/"FALSE"に対応
-    // API経由だとBooleanはTRUE/FALSEのまま来るか確認必要だが、通常は型保持されるか、Stringになる。
-    // Sheets API values.getのvalueRenderOptionデフォルトはFORMATTED_VALUEだが、UNFORMATTED_VALUE推奨かもしれないが、
-    // ここではGASのgetValue互換で考える。
-    // 安全のため、 "FALSE" 文字列比較も入れたほうが良いかもしれないが、
-    // 既存コードが row[EXAM_DATA.DEL_FLAG] == false なので、それに合わせる。
-    // 注意: APIからの戻り値で空セルはundefined/null/空文字になる可能性がある。
+    const examData = allExamData.filter(row => row[EXAM_DATA.MAIL_ADDR] == mailAddr && String(row[EXAM_DATA.DEL_FLAG]).toUpperCase() !== "TRUE");
+
+    // クライアント側の padRowsWithHeader で1行目がヘッダーとして扱われ削除されるため、
+    // ここでヘッダー行を先頭に追加する
+    if (allExamData.length > 0) {
+      examData.unshift(allExamData[0]);
+    }
 
     return JSON.stringify(examData);
   } catch (e) {
@@ -300,8 +315,8 @@ function saveExamDataList(strJuken, mailAddr = myMailAddress) {
 
     // 設定値（最大件数や選択肢）を取得してチェック
     const settings = getSettings();
-    const allowedResults = (JSON.parse(getSheetData(SHEET_NAMES.SEL_GOUHI)) || []).map(row => row[0]);
-    const allowedTypes = (JSON.parse(getSheetData(SHEET_NAMES.SEL_KEITAI)) || []).map(row => row[0]);
+    const allowedResults = (getSheetDataApi(SHEET_NAMES.SEL_GOUHI) || []).map(row => row[0] || "");
+    const allowedTypes = (getSheetDataApi(SHEET_NAMES.SEL_KEITAI) || []).map(row => row[0] || "");
 
     // 削除フラグが立っていないデータのみを抽出してバリデーション
     const activeExamData = examInputData.filter(row => row[EXAM_DATA.DEL_FLAG] != true);
@@ -310,28 +325,56 @@ function saveExamDataList(strJuken, mailAddr = myMailAddress) {
     const examDataSheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.JUKEN_DB);
     const currentDate = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss');
 
-    // 1. 既存データの取得とマップ化
-    // データ量が多い場合はフィルタリングしてから取得する方が効率的だが、
-    // ここでは実装の単純さと確実性を優先して全データを取得し、メモリ上でフィルタリングする
-    const allExamData = examDataSheet.getDataRange().getValues();
-    // ヘッダー行を除外 (行番号はずれるので注意: index 0 -> Row 1, index 1 -> Row 2)
-    // 1行目はヘッダーなので、データのインデックス i は 行番号 i + 1 に対応
-
-    // Map<大学コード, {rowIndex: number, data: Array}>
+    // 1. 既存データの取得とマップ化 (Sheets APIによる最適化された取得)
     const existingDataMap = new Map();
+    const spreadsheetId = activeSpreadsheet.getId();
 
-    for (let i = 1; i < allExamData.length; i++) {
-      const row = allExamData[i];
-      // 対象ユーザー かつ 削除フラグがFalseのものを抽出
-      if (row[EXAM_DATA.MAIL_ADDR] == mailAddr && row[EXAM_DATA.DEL_FLAG] != true) {
-        existingDataMap.set(String(row[EXAM_DATA.DAIGAKU_CODE]), {
-          rowIndex: i + 1, // 1-based row index
-          data: row
-        });
+    // A. メールアドレス列(Col B)を一括取得して検索
+    // B2:B の範囲を取得
+    const mailAddrRange = `'${SHEET_NAMES.JUKEN_DB}'!B2:B`;
+    const mailResponse = Sheets.Spreadsheets.Values.get(spreadsheetId, mailAddrRange);
+    const mailValues = mailResponse.values || [];
+
+    const matchedRowIndices = [];
+    mailValues.forEach((row, index) => {
+      // row[0] がメールアドレス
+      if (row[0] === mailAddr) {
+        // index は 0-based で B2 スタートなので、実際の行番号は index + 2
+        matchedRowIndices.push(index + 2);
       }
+    });
+
+    // B. 対象行のデータ取得 (BatchGet)
+    if (matchedRowIndices.length > 0) {
+      // 取得する範囲のリストを作成 (例: '受験校DB!A10:H10')
+      // 最終列は H (index 7) なので、H列まで取得すれば十分
+      // ※ EXAM_DATA.SHINGAKU が 7 なので Column H corresponds to index 7 (A=0, H=7 ? No. A=1 in A1 notation, index 0 in array)
+      // EXAM_DATA values are 0-based indices for array access.
+      // Column H is the 8th column.
+      const sheetName = SHEET_NAMES.JUKEN_DB;
+      const ranges = matchedRowIndices.map(rowIndex => `'${sheetName}'!A${rowIndex}:H${rowIndex}`);
+
+      const batchResponse = Sheets.Spreadsheets.Values.batchGet(spreadsheetId, { ranges: ranges });
+      const valueRanges = batchResponse.valueRanges || [];
+
+      valueRanges.forEach((valueRange, i) => {
+        if (valueRange.values && valueRange.values.length > 0) {
+          const rowValues = valueRange.values[0];
+          const rowIndex = matchedRowIndices[i];
+
+          // 削除フラグがTrueでないもののみマップに追加
+          if (rowValues[EXAM_DATA.DEL_FLAG] != true) {
+            existingDataMap.set(String(rowValues[EXAM_DATA.DAIGAKU_CODE]), {
+              rowIndex: rowIndex,
+              data: rowValues
+            });
+          }
+        }
+      });
     }
 
     const dataToAdd = [];
+    const dataToUpdate = []; // 更新リクエストのリスト (ValueRange objects)
 
     // 2. 入力データの処理 (更新・新規・論理削除)
     examInputData.forEach(inputRow => {
@@ -343,8 +386,13 @@ function saveExamDataList(strJuken, mailAddr = myMailAddress) {
       // A. クライアント側で削除指示 (DEL_FLAG = true)
       if (inputRow[EXAM_DATA.DEL_FLAG] == true) {
         if (existingRecord) {
-          // 既存にあれば削除フラグを立てる
-          examDataSheet.getRange(existingRecord.rowIndex, EXAM_DATA.DEL_FLAG + 1).setValue(true);
+          // 既存にあれば削除フラグを立てる (Sheets API batchUpdate用)
+          // Range: シート名!C<行番号>
+          const range = `'${SHEET_NAMES.JUKEN_DB}'!A${existingRecord.rowIndex}:C${existingRecord.rowIndex}`;
+          dataToUpdate.push({
+            range: range,
+            values: [[currentDate, mailAddr, true]]
+          });
           existingDataMap.delete(daigakuCode); // 処理済みとしてMapから削除
         }
         return; // 新規追加もしない
@@ -357,8 +405,7 @@ function saveExamDataList(strJuken, mailAddr = myMailAddress) {
         const isChanged =
           String(existingRecord.data[EXAM_DATA.GOUHI]) !== String(inputRow[EXAM_DATA.GOUHI]) ||
           String(existingRecord.data[EXAM_DATA.KEITAI]) !== String(inputRow[EXAM_DATA.KEITAI]) ||
-          String(existingRecord.data[EXAM_DATA.SHINGAKU]) !== String(inputRow[EXAM_DATA.SHINGAKU]);
-
+          String(existingRecord.data[EXAM_DATA.SHINGAKU]).toLowerCase() !== String(inputRow[EXAM_DATA.SHINGAKU]).toLowerCase(); // boolean
         if (isChanged) {
           // 変更がある場合のみ更新
           // 安全のため、値を再構築
@@ -369,9 +416,13 @@ function saveExamDataList(strJuken, mailAddr = myMailAddress) {
           updateRow[EXAM_DATA.SHINGAKU] = inputRow[EXAM_DATA.SHINGAKU];
           // 大学名なども更新された可能性があるなら反映
           updateRow[EXAM_DATA.DAIGAKU_NAME] = inputRow[EXAM_DATA.DAIGAKU_NAME];
-
           // 行全体を更新 (行番号, 1列目, 1行, カラム数)
-          examDataSheet.getRange(existingRecord.rowIndex, 1, 1, updateRow.length).setValues([updateRow]);
+          // Range: シート名!A<行番号>:H<行番号> (H列まで)
+          const range = `'${SHEET_NAMES.JUKEN_DB}'!A${existingRecord.rowIndex}:H${existingRecord.rowIndex}`;
+          dataToUpdate.push({
+            range: range,
+            values: [updateRow]
+          });
         }
 
         // 変更なしの場合は何もしない
@@ -389,7 +440,6 @@ function saveExamDataList(strJuken, mailAddr = myMailAddress) {
         newRow[EXAM_DATA.GOUHI] = inputRow[EXAM_DATA.GOUHI];
         newRow[EXAM_DATA.KEITAI] = inputRow[EXAM_DATA.KEITAI];
         newRow[EXAM_DATA.SHINGAKU] = inputRow[EXAM_DATA.SHINGAKU];
-
         dataToAdd.push(newRow);
       }
     });
@@ -398,17 +448,39 @@ function saveExamDataList(strJuken, mailAddr = myMailAddress) {
     // existingDataMap に残っているデータは、クライアントからのリストに含まれていなかったもの
     if (existingDataMap.size > 0) {
       existingDataMap.forEach((record) => {
-        examDataSheet.getRange(record.rowIndex, EXAM_DATA.DEL_FLAG + 1).setValue(true);
+        // Range: シート名!C<行番号>
+        const range = `'${SHEET_NAMES.JUKEN_DB}'!A${record.rowIndex}:C${record.rowIndex}`;
+        dataToUpdate.push({
+          range: range,
+          values: [[currentDate, mailAddr, true]]
+        });
       });
     }
 
-    // 4. 新規データの書き込み
-    if (dataToAdd.length > 0) {
-      examDataSheet.getRange(examDataSheet.getLastRow() + 1, 1, dataToAdd.length, dataToAdd[0].length).setValues(dataToAdd);
+    // 4-1. 更新の一括実行 (batchUpdate)
+    if (dataToUpdate.length > 0) {
+      Sheets.Spreadsheets.Values.batchUpdate({
+        valueInputOption: 'USER_ENTERED',
+        data: dataToUpdate
+      }, spreadsheetId);
     }
 
+    // 4-2. 新規データの追加 (append)
+    if (dataToAdd.length > 0) {
+      // シート名のみを指定してappend (最終行に追加される)
+      const range = `'${SHEET_NAMES.JUKEN_DB}'!A1`;
+      Sheets.Spreadsheets.Values.append({
+        range: range,
+        majorDimension: 'ROWS',
+        values: dataToAdd
+      }, spreadsheetId, range, { valueInputOption: 'USER_ENTERED' });
+    }
+
+    // 変更点：保存完了後に最新のデータリストを直接返す
+    return getExamDataList(mailAddr);
+
   } catch (e) {
-    console.log('saveExamDataListでエラー: ' + e);
+    console.error('saveExamDataListでエラー: ' + e);
     // エラーメッセージを詳細化
     if (e.message && e.message.includes('他のユーザーが編集中')) {
       throw e; // タイムアウトメッセージをそのまま返す
@@ -430,6 +502,7 @@ function saveExamDataList(strJuken, mailAddr = myMailAddress) {
   }
 }
 /*
+// setValuesによる書き込み
 function saveExamDataList(strJuken, mailAddr = myMailAddress) {
   const lock = LockService.getDocumentLock(); // スプレッドシート単位でロック
   let hasLock = false;
@@ -508,7 +581,9 @@ function saveExamDataList(strJuken, mailAddr = myMailAddress) {
     SpreadsheetApp.flush();
   }
 }
-
+*/
+/*
+// 全データ書き換えバージョン
 function saveExamDataList(strJuken, mailAddr = myMailAddress) {
   const lock = LockService.getDocumentLock(); // スプレッドシート単位でロック
   try {
@@ -660,7 +735,7 @@ function sendPdf(mailAddr = myMailAddress) {
 //================================================================================
 // 設定データの取得
 function getSettings() {
-  const values = JSON.parse(getSheetData(SHEET_NAMES.SETTINGS)) || []
+  const values = getSheetDataApi(SHEET_NAMES.SETTINGS) || []
   return {
     pageTitle: values[0][1] || "",
     inputMax: values[1][1] || 0,
@@ -678,7 +753,7 @@ function isValidUser(targetMailAddr) {
     return true;
   }
   // 2. 他人のデータを保存しようとしている場合、実行者が「教員」かチェック
-  const arrAllTeachers = JSON.parse(getSheetData(SHEET_NAMES.TEACHERS)) || [];
+  const arrAllTeachers = getSheetDataApi(SHEET_NAMES.TEACHERS) || [];
   const isTeacher = arrAllTeachers.some(row => row[0] == currentUser);
   if (isTeacher) {
     return true; // 教員なら他人のデータも保存OK
@@ -766,6 +841,27 @@ function getSheetData(sheetName) {
   } catch (e) {
     console.error('getSheetDataでエラー: ' + e);
     throw new Error('作成者に連絡してください。');
+  }
+}
+
+function getSheetDataApi(sheetName) {
+  try {
+    const spreadsheetId = activeSpreadsheet.getId();
+    const sheet = activeSpreadsheet.getSheetByName(sheetName);
+    const lastRow = sheet.getLastRow();
+    // 実際のデータ行数のみを取得（ヘッダー行をスキップ）
+    if (lastRow <= 1) {
+      return []; // データがない場合
+    }
+    const lastColumn = sheet.getLastColumn();
+    const a1Notation = sheet.getRange(2, 1, lastRow - 1, lastColumn).getA1Notation()
+    const rangeName = `'${sheetName}'!${a1Notation}`;
+    // Sheets API を直接叩いて値を取得
+    const response = Sheets.Spreadsheets.Values.get(spreadsheetId, rangeName);
+    return response.values || [];
+  } catch (e) {
+    console.error(e);
+    throw new Error("API取得エラー: " + e.message);
   }
 }
 

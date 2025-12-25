@@ -1,4 +1,5 @@
 <script>
+  // 絵文字の準備 ↩️ 🗑 💾 🔍 ✅
   //--------------------------------------------------------------------------------
   // グローバルの定義
   //--------------------------------------------------------------------------------
@@ -86,7 +87,7 @@
       "confirmDialogButtonYes", "confirmDialogButtonNo", "headerTitle",
       "currentUserName", "classSelectionContainer", "studentNumberSelectionContainer",
       "progressDialogMessageContainer", "inputTableContainer", "progressDialog", "statusMessage",
-      "sendFormButton1", "sendFormButton2", "issueReportButton1", "issueReportButton2",
+      "statusMessage2", "sendFormButton1", "sendFormButton2", "issueReportButton1", "issueReportButton2",
       "searchTableContainer", "searchButton", "keywordInput", "moveLeftButton",
       "moveRightButton", "cancelButton", "searchBackground", "searchBody",
       "examRowTemplate", "sendFormButton1Message", "sendFormButton2Message",
@@ -148,28 +149,30 @@
       disableReportButton(true);
       setElementHidden('selectorSection', false);
       setElementHidden("inputSection", true);
-      setDialogSpinner(" 【教員モード】生徒一覧取得中・・・");
+      showProgressDialog(false);
+      setStatusMessage2(" 【教員モード】生徒一覧取得中・・・");
       // 生徒一覧を非同期で取得
       google.script.run
         .withSuccessHandler(studentsJSON => {
           allStudentsData = padRowsWithHeader(JSON.parse(studentsJSON) || []);
-          showProgressDialog(false);
+          setStatusMessage2("");
           showSelector();
         })
         .withFailureHandler(error => {
           console.error(error);
-          showProgressDialog(false);
+          setStatusMessage2("");
           confirmAsync("エラー", "生徒データの取得に失敗しました。<br>詳細: " + error.message);
         })
         .getStudentsList();
 
       getUniversityDataList();
     } else if (allData.userRole == 'student') {
-      setDialogSpinner(` ようこそ、${currentStudentData[STUDENT_DATA.NAME]}さん`);
+      showProgressDialog(false);
+      setStatusMessage2(` 受験校データ取得中...`);
       setMyName(currentStudentData[STUDENT_DATA.NAME]);
       inputEnable = allData.inputEnable;
       if (inputEnable == false) {
-        showProgressDialog(false);
+        setStatusMessage2("");
         confirmAsync("情報", "現在、管理者により入力が禁止されています。");
         return;
       }
@@ -181,19 +184,21 @@
 
       // 受験データローディング中のメッセージを表示
       //setDialogSpinner(" 志望校データ読込中・・・");
-      setDialogSpinner(`ようこそ、${currentStudentData[STUDENT_DATA.NAME]} さん`);
+      //setDialogSpinner(`ようこそ、${currentStudentData[STUDENT_DATA.NAME]} さん`);
 
       // 受験データを非同期で取得
       google.script.run
         .withSuccessHandler(examJSON => {
           examDataList = padRowsWithHeader(JSON.parse(examJSON) || []);
           setInputTable(); // データを反映
-          showProgressDialog(false);
+          setStatusMessage2("");
+          //showProgressDialog(false);
           //console.log('受験データの取得が完了しました');
         })
         .withFailureHandler(error => {
           console.error(error);
-          showProgressDialog(false);
+          setStatusMessage2("");
+          //showProgressDialog(false);
           confirmAsync("エラー", "受験データの取得に失敗しました。<br>詳細: " + error.message);
         })
         .getExamDataList();
@@ -402,6 +407,18 @@
 
   function setStatusMessage(text) {
     const idStatusMsg = dom.statusMessage;
+    idStatusMsg.innerHTML = '';
+
+    if (text.length) {
+      const spanSpinner = document.createElement("span");
+      spanSpinner.className = "span-spinner"
+      idStatusMsg.append(spanSpinner)
+      idStatusMsg.append(text)
+    }
+  }
+
+  function setStatusMessage2(text) {
+    const idStatusMsg = dom.statusMessage2;
     idStatusMsg.innerHTML = '';
 
     if (text.length) {
@@ -775,20 +792,41 @@
   let displayStart = 0;
   const displayStep = 50;
 
+  // フィルタをかけたデータを都度サーバーから取得する
+  function getFilteredUniversity(searchWord) {
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(str => resolve(JSON.parse(str)))
+        .withFailureHandler(reject)
+        .getFilteredUniversityDataList(searchWord, displayStart, displayStep);
+    });
+  }
+
   function searchKeyword() {
     // デバウンス処理を挟む
-    debounce(() => {
+    debounce(async () => {
       const keywordInput = dom.keywordInput.value;
-      const keywords = keywordInput.replace(/　/g, ' ').split(' ').filter(kw => kw); // 空のキーワードを除外
       const dcTotal = dom.displayCountTotal;
       const dcRange = dom.displayCountRange;
       const resultsContainer = dom.searchTableContainer;
-      resultsContainer.replaceChildren(); // 前回の検索結果をクリア
+      resultsContainer.replaceChildren(); // 前回の検索結果をクリ
+      // ----- 大学データ全件事前ロード
+      const keywords = keywordInput.replace(/　/g, ' ').split(' ').filter(kw => kw); // 空のキーワードを除外
       const filteredData = universityCodeList.filter(row =>
         keywords.every(kw => (row[1] || "").includes(kw) || String(row[0] || "").includes(kw))
       );
       const limitedData = filteredData.slice(displayStart, displayStart + displayStep);
       const total = filteredData.length;
+      // ----- 大学データ都度ゲット
+      /*
+      setDialogSpinner('検索中．．．')
+      showProgressDialog(true);
+      const objResult = await getFilteredUniversity(keywordInput);
+      showProgressDialog(false);
+      const limitedData = objResult.data;
+      const total = objResult.total;
+      */
+      // -----
       const moveLeft = dom.moveLeftButton;
       const moveRight = dom.moveRightButton;
 
@@ -905,13 +943,16 @@
       .saveExamDataList(strJuken, studentMailAddress);
   }
 
-  function onExamDataSent() {
+  function onExamDataSent(strJSON) {
     setSendMessage('');
     isItemChanged = false;
     disableSendButton(true);
     showProgressDialog(false);
-    if (isReloadRequired) {
-      getExamDataList();
+
+    // サーバーから返された最新データで更新
+    if (strJSON) {
+      examDataList = padRowsWithHeader(JSON.parse(strJSON));
+      setInputTable();
     }
   }
 
@@ -932,7 +973,7 @@
 
   function onExamDataReceived(strJSON) {
     isDeleted = false;
-    examDataList = JSON.parse(strJSON)
+    examDataList = padRowsWithHeader(JSON.parse(strJSON));
     showProgressDialog(false);
     disableReportButton(false);
     //setElementHidden("selectorSection", true);

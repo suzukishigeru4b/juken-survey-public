@@ -150,11 +150,20 @@ juken-survey/
 ├── css.html             # スタイルシート (CSS)
 ├── script.html          # クライアントサイドロジック (JavaScript)
 ├── appsscript.json      # GASマニフェストファイル
+├── .clasp.json          # clasp設定ファイル
+│
 ├── README.md            # 本ドキュメント
 ├── PROGRAM_SPECIFICATION.md  # プログラム詳細仕様
 ├── TEACHER_MANUAL.md    # 教員向け操作マニュアル
 ├── STUDENT_MANUAL.md    # 生徒向け操作マニュアル
-└── VERSION_CHANGES.md   # バージョン変更履歴
+├── VERSION_CHANGES.md   # バージョン変更履歴
+│
+└── 1.0.0/               # 旧バージョン (v1.0.0) バックアップ
+    ├── main.js
+    ├── index.html
+    ├── css.html
+    ├── script.html
+    └── appsscript.json
 ```
 
 ---
@@ -195,5 +204,3 @@ copies or substantial portions of the Software.
 **Made with ❤️ for Education**
 
 </div>
-
-

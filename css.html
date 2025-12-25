@@ -220,7 +220,7 @@
   .dialog-header {
     background: var(--color-header);
     padding: var(--space-4);
-    margin-bottom: var(--space-4)
+    margin-bottom: var(--space-4);
     border-radius: var(--radius-xs);
     font-weight: bold;
   }
@@ -321,7 +321,7 @@
   }
 
   .search-body {
-    max-width: 600px;
+    max-width: 800px;
     margin: 0 auto;
     background: var(--color-surface);
     padding: var(--space-4);
@@ -364,13 +364,13 @@
   }
 
   th {
-    padding: var(--space-2);
+    padding: var(--space-1);
     text-align: center;
   }
 
   td {
-    padding: var(--space-2);
-    /*padding: var(--space-1) var(--space-1);*/
+    padding: var(--space-1);
+    border-bottom: 1px solid var(--color-border);
     text-align: left;
   }
 
@@ -379,11 +379,16 @@
   }
 
   .radio-label {
-    display: flex;      /* ブロック要素にする */
-    height: 100%;        /* 高さいっぱい */
-    padding: var(--space-1) var(--space-1);       /* もともとtdにあった余白をここに設定 */
-    cursor: pointer;     /* カーソルを指の形に */
-    box-sizing: border-box; /* paddingを含めたサイズ計算にする */
+    display: flex;
+    /* ブロック要素にする */
+    height: 100%;
+    /* 高さいっぱい */
+    padding: var(--space-1) var(--space-1);
+    /* もともとtdにあった余白をここに設定 */
+    cursor: pointer;
+    /* カーソルを指の形に */
+    box-sizing: border-box;
+    /* paddingを含めたサイズ計算にする */
     align-items: center;
     justify-content: center;
   }
