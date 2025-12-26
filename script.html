@@ -23,6 +23,9 @@
   let isDeleted = false;
   let isUniversityCodeLoading = false;
 
+  //================================================================================
+  // ヘルパー関数
+  //================================================================================
   // ダイアログ (ブラウザ依存あり)
   const confirmAsync = async (title, message) => {
     if (dom.confirmDialogTitle) dom.confirmDialogTitle.textContent = title;
@@ -43,7 +46,7 @@
   }
 
   //================================================================================
-  // 大学データキャッシュのクリア（管理者がデータ更新時に使用）
+  // キャッシュ関連
   //================================================================================
   function clearUniversityDataCache() {
     try {
@@ -166,9 +169,9 @@
     } else if (allData.userRole == 'student') {
       showProgressDialog(false);
       setStatusMessage2(` 受験校データ取得中...`);
-      setMyName(currentStudentData[STUDENT_DATA.NAME]);
+      //setMyName(currentStudentData[STUDENT_DATA.NAME]);
       inputEnable = allData.inputEnable;
-      if (inputEnable == false) {
+      if (inputEnable === false) { // APIで値取得後、サーバサイドで文字列をブールに変換
         setStatusMessage2("");
         confirmAsync("情報", "現在、管理者により入力が禁止されています。");
         return;
@@ -553,7 +556,7 @@
         dname.textContent = jukenItem[EXAM_DATA.DAIGAKU_NAME];
         keitaiCell.appendChild(createExamTypeSelect(i, jukenItem[EXAM_DATA.KEITAI]));
         gouhiCell.appendChild(createResultSelect(i, jukenItem[EXAM_DATA.GOUHI]));
-        if (String(jukenItem[EXAM_DATA.SHINGAKU]).toUpperCase() === "TRUE") {
+        if (jukenItem[EXAM_DATA.SHINGAKU] === true) {
           shingakuRadio.checked = true;
           selectedProceedRadioId = shingakuRadio.id;
         }

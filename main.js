@@ -1,6 +1,6 @@
 /**
  * 受験校調査システム (Preferred school survey system)
- * Version 2.0.0
+ * Version 2.1.1
  * * Copyright (c) 2025 Shigeru Suzuki
  * * Released under the MIT License.
  * https://opensource.org/licenses/MIT
@@ -78,6 +78,13 @@ const BENESSE_DATA = {
   DAY_TETSUZUKI: 42,
 };
 
+//================================================================================
+// 1. ヘルパー関数
+//================================================================================
+// 文字列をブール値に変換する(Sheet APIでbooleanの戻り値は文字列なので)
+const isTrue = (val) => {
+  return String(val).toUpperCase() === 'TRUE';
+}
 
 //================================================================================
 // 2. トリガー・エントリポイント (Triggers)
@@ -124,6 +131,10 @@ function onOpen() {
 //================================================================================
 // 3. クライアント連携関数 ※google.script.run から呼び出される関数群
 //================================================================================
+
+//--------------------------------------------------------------------------------
+// 3-1. 初期データ取得
+//--------------------------------------------------------------------------------
 // 初期データの取得 (アプリ起動時) - Google Sheets API (batchGet)を使用
 function getInitialData() {
   try {
@@ -142,16 +153,8 @@ function getInitialData() {
     const valueRanges = response.valueRanges;
 
     // データの抽出 (値がない場合は空配列)
-    const examTypeOptions = (valueRanges[0].values || []).map(row => {
-      let examType = row[0]
-      if (!examType) examType = '';
-      return examType;
-    });
-    const resultOptions = (valueRanges[1].values || []).map(row => {
-      let result = row[0];
-      if (!result) result = '';
-      return result;
-    });
+    const examTypeOptions = (valueRanges[0].values || []).map(row => row[0] || '');
+    const resultOptions = (valueRanges[1].values || []).map(row => row[0] || '');
     const allStudentsData = valueRanges[2].values || []; // 直接配列として扱う
     const studentData = allStudentsData.find(row => row[STUDENT_DATA.MAIL_ADDR] == myMailAddress);
     const arrAllTeachers = valueRanges[3].values || [];  // 直接配列として扱う
@@ -162,7 +165,7 @@ function getInitialData() {
     const settings = {
       pageTitle: settingsRaw[0] ? settingsRaw[0][1] : "",
       inputMax: settingsRaw[1] ? settingsRaw[1][1] : 0,
-      inputEnable: settingsRaw[2] ? settingsRaw[2][1] : false, // デフォルトfalse
+      inputEnable: settingsRaw[2] ? isTrue(settingsRaw[2][1]) : false, // APIの戻り値は文字列
       mailTitle: settingsRaw[3] ? settingsRaw[3][1] : "",
       mailMessage: settingsRaw[4] ? settingsRaw[4][1] : ""
     };
@@ -183,7 +186,7 @@ function getInitialData() {
         teacherData: [],
         studentsData: [],
         studentData: [allStudentsData[0], studentData], // ヘッダーとデータをセットで送信
-        examData: [], // 空配列：後で取得
+        examData: [] // 空配列：後で取得
       }
     } else if (arrTeacher) {
       // 教員モード
@@ -200,7 +203,7 @@ function getInitialData() {
         teacherData: [arrAllTeachers[0], arrTeacher], // ヘッダーとデータをセットで送信
         studentsData: [], // 空配列：後で取得
         studentData: [],
-        examData: [],
+        examData: []
       }
     } else {
       // ゲスト/権限なし
@@ -217,7 +220,7 @@ function getInitialData() {
         teacherData: [],
         studentsData: [],
         studentData: [],
-        examData: [],
+        examData: []
       }
     }
     return JSON.stringify(allData);
@@ -228,6 +231,9 @@ function getInitialData() {
   }
 }
 
+//--------------------------------------------------------------------------------
+// 3-2. マスタデータ取得
+//--------------------------------------------------------------------------------
 // 生徒一覧取得（教員モード用） - API使用
 function getStudentsList() {
   try {
@@ -270,8 +276,12 @@ function getFilteredUniversityDataList(searchWord, start, limit) {
   });
 }
 
-
+//--------------------------------------------------------------------------------
+// 3-3. 受験データ操作 (取得・保存)
+//--------------------------------------------------------------------------------
+//
 // 受験データのみの送信 (更新後など) - API使用
+//
 function getExamDataList(mailAddr = myMailAddress) {
   try {
     const spreadsheetId = activeSpreadsheet.getId();
@@ -281,7 +291,7 @@ function getExamDataList(mailAddr = myMailAddress) {
     const allExamData = response.values || [];
 
     // フィルタリング
-    const examData = allExamData.filter(row => row[EXAM_DATA.MAIL_ADDR] == mailAddr && String(row[EXAM_DATA.DEL_FLAG]).toUpperCase() !== "TRUE");
+    const examData = allExamData.filter(row => row[EXAM_DATA.MAIL_ADDR] === mailAddr && isTrue(row[EXAM_DATA.DEL_FLAG]) !== true);
 
     // クライアント側の padRowsWithHeader で1行目がヘッダーとして扱われ削除されるため、
     // ここでヘッダー行を先頭に追加する
@@ -296,161 +306,160 @@ function getExamDataList(mailAddr = myMailAddress) {
   }
 }
 
+//
 // 受験データの保存 (バリデーション付き・最適化版)
+//
 function saveExamDataList(strJuken, mailAddr = myMailAddress) {
-  // バリデーション
-  if (!isValidUser(mailAddr)) {
+  if (!isValidUser(mailAddr)) { // バリデーション
     throw new Error("保存権限がありません。不正なアクセスの可能性があります。");
   }
   const examInputData = JSON.parse(strJuken) || [];
-  // 設定値（最大件数や選択肢）を取得してチェック
-  const settings = getSettings();
-  const allowedResults = (getSheetDataApiWithCache(SHEET_NAMES.SEL_GOUHI) || []).map(row => row[0] || "");
-  const allowedTypes = (getSheetDataApiWithCache(SHEET_NAMES.SEL_KEITAI) || []).map(row => row[0] || "");
-  // 削除フラグが立っていないデータのみを抽出してバリデーション
-  const activeExamData = examInputData.filter(row => row[EXAM_DATA.DEL_FLAG] != true);
-  validateInputData(activeExamData, settings.inputMax, allowedResults, allowedTypes);
+  const activeExamData = examInputData.filter(row => isTrue(row[EXAM_DATA.DEL_FLAG]) !== true); // 削除フラグが立っていないデータのみを抽出してバリデーション
+  validateInputData(activeExamData);
   const currentDate = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss');
-  // 1. 既存データの取得とマップ化 (Sheets APIによる最適化された取得)
-  const existingDataMap = new Map();
-  const spreadsheetId = activeSpreadsheet.getId();
-
-  // A. メールアドレス列(Col B)を一括取得して検索
-  // B2:B の範囲を取得
-  const indexRange = `'${SHEET_NAMES.JUKEN_DB}'!B2:D`; // row[0]:mailAddr, row[1]:delFlag, row[2]:daigakuCode;
-  const mailResponse = Sheets.Spreadsheets.Values.get(spreadsheetId, indexRange);
-  const mailValues = mailResponse.values || [];
-  const matchedRowIndices = [];
-  mailValues.forEach((row, index) => {
-    // row[0] がメールアドレス
-    if (row[0] === mailAddr) {
-      // index は 0-based で B2 スタートなので、実際の行番号は index + 2
-      matchedRowIndices.push(index + 2);
-    }
-  });
-
-  // B. 対象行のデータ取得 (BatchGet)
-  if (matchedRowIndices.length > 0) {
-    // 取得する範囲のリストを作成 (例: '受験校DB!A10:H10')
-    // 最終列は H (index 7) なので、H列まで取得すれば十分
-    // ※ EXAM_DATA.SHINGAKU が 7 なので Column H corresponds to index 7 (A=0, H=7 ? No. A=1 in A1 notation, index 0 in array)
-    // EXAM_DATA values are 0-based indices for array access.
-    // Column H is the 8th column.
-    const sheetName = SHEET_NAMES.JUKEN_DB;
-    const ranges = matchedRowIndices.map(rowIndex => `'${sheetName}'!A${rowIndex}:H${rowIndex}`);
-
-    const batchResponse = Sheets.Spreadsheets.Values.batchGet(spreadsheetId, { ranges: ranges });
-    const valueRanges = batchResponse.valueRanges || [];
-
-    valueRanges.forEach((valueRange, i) => {
-      if (valueRange.values && valueRange.values.length > 0) {
-        const rowValues = valueRange.values[0];
-        const rowIndex = matchedRowIndices[i];
-
-        // 削除フラグがTrueでないもののみマップに追加
-        if (String(rowValues[EXAM_DATA.DEL_FLAG]).toLowerCase() !== "true") {
-          existingDataMap.set(String(rowValues[EXAM_DATA.DAIGAKU_CODE]), {
-            rowIndex: rowIndex,
-            data: rowValues
-          });
-        }
-      }
-    });
-  }
-
-  const dataToAdd = [];
-  const dataToUpdate = []; // 更新リクエストのリスト (ValueRange objects)
-
-  // 2. 入力データの処理 (更新・新規・論理削除)
-  examInputData.forEach(inputRow => {
-    const daigakuCode = String(inputRow[EXAM_DATA.DAIGAKU_CODE]);
-    if (!daigakuCode) return;
-
-    const existingRecord = existingDataMap.get(daigakuCode);
-
-    // A. クライアント側で削除指示 (DEL_FLAG = true)
-    if (String(inputRow[EXAM_DATA.DEL_FLAG]).toLowerCase() === "true") {
-      if (existingRecord) {
-        // 既存にあれば削除フラグを立てる (Sheets API batchUpdate用)
-        // Range: シート名!C<行番号>
-        const range = `'${SHEET_NAMES.JUKEN_DB}'!A${existingRecord.rowIndex}:C${existingRecord.rowIndex}`;
-        dataToUpdate.push({
-          range: range,
-          values: [[currentDate, mailAddr, "TRUE"]]
-        });
-        existingDataMap.delete(daigakuCode); // 処理済みとしてMapから削除
-      }
-      return; // 新規追加もしない
-    }
-    // B. 既存データの更新 または 変更なし
-    if (existingRecord) {
-      // 比較対象のカラム: 合否, 受験形態, 進学, (大学コードはキーなので一致), (大学名はマスタ依存だが一応確認?)
-      // ここでは編集可能な主要項目を比較
-      const isChanged =
-        String(existingRecord.data[EXAM_DATA.GOUHI]) !== String(inputRow[EXAM_DATA.GOUHI]) ||
-        String(existingRecord.data[EXAM_DATA.KEITAI]) !== String(inputRow[EXAM_DATA.KEITAI]) ||
-        String(existingRecord.data[EXAM_DATA.SHINGAKU]).toLowerCase() !== String(inputRow[EXAM_DATA.SHINGAKU]).toLowerCase(); // boolean
-      if (isChanged) {
-        const updateRow = [...existingRecord.data]; // 既存データをコピー
-        updateRow[EXAM_DATA.TIME_STAMP] = currentDate; // 更新日時
-        updateRow[EXAM_DATA.DAIGAKU_NAME] = inputRow[EXAM_DATA.DAIGAKU_NAME];
-        updateRow[EXAM_DATA.GOUHI] = inputRow[EXAM_DATA.GOUHI];
-        updateRow[EXAM_DATA.KEITAI] = inputRow[EXAM_DATA.KEITAI];
-        updateRow[EXAM_DATA.SHINGAKU] = String(inputRow[EXAM_DATA.SHINGAKU]).toUpperCase();
-        const range = `'${SHEET_NAMES.JUKEN_DB}'!A${existingRecord.rowIndex}:H${existingRecord.rowIndex}`;
-        dataToUpdate.push({
-          range: range,
-          values: [updateRow]
-        });
-      }
-      // 変更なしの場合は何もしないで処理済みにする
-      existingDataMap.delete(daigakuCode); // 処理済みとしてMapから削除
-    } else {
-      // C. 新規追加
-      const newRow = [];
-      newRow[EXAM_DATA.TIME_STAMP] = currentDate;
-      newRow[EXAM_DATA.MAIL_ADDR] = mailAddr;
-      newRow[EXAM_DATA.DEL_FLAG] = "FALSE";
-      newRow[EXAM_DATA.DAIGAKU_CODE] = inputRow[EXAM_DATA.DAIGAKU_CODE];
-      newRow[EXAM_DATA.DAIGAKU_NAME] = inputRow[EXAM_DATA.DAIGAKU_NAME];
-      newRow[EXAM_DATA.GOUHI] = inputRow[EXAM_DATA.GOUHI];
-      newRow[EXAM_DATA.KEITAI] = inputRow[EXAM_DATA.KEITAI];
-      newRow[EXAM_DATA.SHINGAKU] = String(inputRow[EXAM_DATA.SHINGAKU]).toUpperCase();
-      dataToAdd.push(newRow);
-    }
-  });
-  // 3. 入力データに存在しなかった既存データ (削除されたとみなす)
-  // existingDataMap に残っているデータは、クライアントからのリストに含まれていなかったもの
-  if (existingDataMap.size > 0) {
-    existingDataMap.forEach((record) => {
-      // Range: シート名!A<行番号>:C<行番号>
-      const range = `'${SHEET_NAMES.JUKEN_DB}'!A${record.rowIndex}:C${record.rowIndex}`;
-      dataToUpdate.push({
-        range: range,
-        values: [[currentDate, mailAddr, true]]
-      });
-    });
-  }
-
-  // 4-1. 更新の一括実行 (batchUpdate)
-  const lock = LockService.getDocumentLock(); // スプレッドシート単位でロック
-  let hasLock = false; // フラグの初期化
+  const lock = LockService.getDocumentLock();
+  let hasLock = false;
   try {
-    // 待機時間を10秒に延長
     hasLock = lock.tryLock(10000);
     if (!hasLock) {
       throw new Error('他のユーザーが編集中です。少し待ってから再度お試しください。');
     }
+    const spreadsheetId = activeSpreadsheet.getId();
+    // ===== STEP 1: 既存データの取得 =====
+    // メールアドレスでフィルタリングして対象レコードを取得
+    const indexRange = `'${SHEET_NAMES.JUKEN_DB}'!B2:D`;
+    const mailResponse = Sheets.Spreadsheets.Values.get(spreadsheetId, indexRange);
+    const mailValues = mailResponse.values || [];
+
+    const matchedRowIndices = [];
+    mailValues.forEach((row, index) => {
+      if (row[0] === mailAddr) {
+        matchedRowIndices.push(index + 2); // 実際の行番号
+      }
+    });
+    // 既存データをMapで管理: Map<大学コード, Array<{rowIndex, data}>>
+    const existingDataMap = new Map();
+    if (matchedRowIndices.length > 0) {
+      const sheetName = SHEET_NAMES.JUKEN_DB;
+      const ranges = matchedRowIndices.map(rowIndex =>
+        `'${sheetName}'!A${rowIndex}:H${rowIndex}`
+      );
+      const batchResponse = Sheets.Spreadsheets.Values.batchGet(spreadsheetId, {
+        ranges: ranges
+      });
+      const valueRanges = batchResponse.valueRanges || [];
+      valueRanges.forEach((valueRange, i) => {
+        if (valueRange.values && valueRange.values.length > 0) {
+          const rowValues = valueRange.values[0];
+          const rowIndex = matchedRowIndices[i];
+          const daigakuCode = String(rowValues[EXAM_DATA.DAIGAKU_CODE] || '');
+
+          if (daigakuCode) {
+            if (!existingDataMap.has(daigakuCode)) {
+              existingDataMap.set(daigakuCode, []);
+            }
+            existingDataMap.get(daigakuCode).push({
+              rowIndex: rowIndex,
+              data: rowValues
+            });
+          }
+        }
+      });
+    }
+    // ===== STEP 2: 入力データの処理 =====
+    const dataToAdd = [];      // 新規追加データ
+    const dataToUpdate = [];   // 更新データ (ValueRange objects)
+    const processedCodes = new Set(); // 処理済み大学コード
+    examInputData.forEach(inputRow => {
+      const daigakuCode = String(inputRow[EXAM_DATA.DAIGAKU_CODE] || '').trim();
+      if (!daigakuCode) return;
+      const isDeleteRequest = isTrue(inputRow[EXAM_DATA.DEL_FLAG]);
+      const existingRecords = existingDataMap.get(daigakuCode);
+      if (existingRecords && existingRecords.length > 0) { // ---- 既存データがある場合 ----
+        if (isDeleteRequest) { // A. 削除リクエスト → すべて論理削除
+          existingRecords.forEach(record => {
+            const range = `'${SHEET_NAMES.JUKEN_DB}'!A${record.rowIndex}:C${record.rowIndex}`;
+            dataToUpdate.push({
+              range: range,
+              values: [[currentDate, mailAddr, true]]
+            });
+          });
+        } else { // B. 更新リクエスト → 最初の1件を更新、残りは論理削除
+          const targetRecord = existingRecords[0];
+          for (let i = 1; i < existingRecords.length; i++) { // 重複レコード(2件目以降)を論理削除
+            const dupRecord = existingRecords[i];
+            const range = `'${SHEET_NAMES.JUKEN_DB}'!A${dupRecord.rowIndex}:C${dupRecord.rowIndex}`;
+            dataToUpdate.push({
+              range: range,
+              values: [[currentDate, mailAddr, true]]
+            });
+          }
+          // メインレコードの更新チェック
+          const existingData = targetRecord.data;
+          const isChanged =
+            String(existingData[EXAM_DATA.GOUHI] || '') !== String(inputRow[EXAM_DATA.GOUHI] || '') ||
+            String(existingData[EXAM_DATA.KEITAI] || '') !== String(inputRow[EXAM_DATA.KEITAI] || '') ||
+            isTrue(existingData[EXAM_DATA.SHINGAKU]) !== isTrue(inputRow[EXAM_DATA.SHINGAKU]) ||
+            isTrue(existingData[EXAM_DATA.DEL_FLAG]) !== false; // 削除済みからの復帰
+          if (isChanged) {
+            const updateRow = [
+              currentDate,                                      // TIME_STAMP
+              mailAddr,                                         // MAIL_ADDR
+              false,                                            // DEL_FLAG
+              daigakuCode,                                      // DAIGAKU_CODE
+              inputRow[EXAM_DATA.DAIGAKU_NAME] || '',          // DAIGAKU_NAME
+              inputRow[EXAM_DATA.GOUHI] || '',                 // GOUHI
+              inputRow[EXAM_DATA.KEITAI] || '',                // KEITAI
+              isTrue(inputRow[EXAM_DATA.SHINGAKU])             // SHINGAKU
+            ];
+            const range = `'${SHEET_NAMES.JUKEN_DB}'!A${targetRecord.rowIndex}:H${targetRecord.rowIndex}`;
+            dataToUpdate.push({
+              range: range,
+              values: [updateRow]
+            });
+          }
+        }
+        processedCodes.add(daigakuCode);
+      } else {
+        if (!isDeleteRequest) { // ---- 既存データがない場合 ----
+          const newRow = [ // C. 新規追加
+            currentDate,                                      // TIME_STAMP
+            mailAddr,                                         // MAIL_ADDR
+            false,                                            // DEL_FLAG
+            daigakuCode,                                      // DAIGAKU_CODE
+            inputRow[EXAM_DATA.DAIGAKU_NAME] || '',          // DAIGAKU_NAME
+            inputRow[EXAM_DATA.GOUHI] || '',                 // GOUHI
+            inputRow[EXAM_DATA.KEITAI] || '',                // KEITAI
+            isTrue(inputRow[EXAM_DATA.SHINGAKU])             // SHINGAKU
+          ];
+          dataToAdd.push(newRow);
+        }
+      }
+    });
+    // ===== STEP 3: 入力に含まれない既存データを論理削除 =====
+    existingDataMap.forEach((records, daigakuCode) => {
+      if (!processedCodes.has(daigakuCode)) { // 入力データに含まれていない既存レコードはすべて論理削除
+        records.forEach(record => { // 既に論理削除されている場合はスキップ
+          if (isTrue(record.data[EXAM_DATA.DEL_FLAG]) !== true) {
+            const range = `'${SHEET_NAMES.JUKEN_DB}'!A${record.rowIndex}:C${record.rowIndex}`;
+            dataToUpdate.push({
+              range: range,
+              values: [[currentDate, mailAddr, true]]
+            });
+          }
+        });
+      }
+    });
+    // ===== STEP 4: データベースへの反映 =====
+    // 4-1. 更新の一括実行 (batchUpdate)
     if (dataToUpdate.length > 0) {
       Sheets.Spreadsheets.Values.batchUpdate({
         valueInputOption: 'USER_ENTERED',
         data: dataToUpdate
       }, spreadsheetId);
     }
-
     // 4-2. 新規データの追加 (append)
     if (dataToAdd.length > 0) {
-      // シート名のみを指定してappend (最終行に追加される)
       const range = `'${SHEET_NAMES.JUKEN_DB}'!A1`;
       Sheets.Spreadsheets.Values.append({
         range: range,
@@ -458,17 +467,14 @@ function saveExamDataList(strJuken, mailAddr = myMailAddress) {
         values: dataToAdd
       }, spreadsheetId, range, { valueInputOption: 'USER_ENTERED' });
     }
-
-    // 変更点：保存完了後に最新のデータリストを直接返す
+    // ===== STEP 5: 最新データを返却 =====
     return getExamDataList(mailAddr);
-
   } catch (e) {
     console.error('saveExamDataListでエラー: ' + e);
-    // エラーメッセージを詳細化
     if (e.message && e.message.includes('他のユーザーが編集中')) {
-      throw e; // タイムアウトメッセージをそのまま返す
+      throw e;
     } else if (e.message && e.message.includes('保存権限')) {
-      throw e; // 権限エラーメッセージをそのまま返す
+      throw e;
     } else {
       throw new Error('データの保存に失敗しました。時間をおいて再度お試しください。');
     }
@@ -478,152 +484,14 @@ function saveExamDataList(strJuken, mailAddr = myMailAddress) {
         lock.releaseLock();
       } catch (e) {
         console.warn('ロックの解放に失敗しました:', e);
-        // ロック解放エラーは無視（自動的に解放される）
       }
     }
     SpreadsheetApp.flush();
   }
 }
-/*
-// setValuesによる書き込み
-function saveExamDataList(strJuken, mailAddr = myMailAddress) {
-  const lock = LockService.getDocumentLock(); // スプレッドシート単位でロック
-  let hasLock = false;
-  try {
-    // より短い待機時間で試行（5秒）
-    hasLock = lock.tryLock(5000);
-    if (!hasLock) {
-      throw new Error('他のユーザーが編集中です。少し待ってから再度お試しください。');
-    }
-
-    if (!isValidUser(mailAddr)) {
-      throw new Error("保存権限がありません。不正なアクセスの可能性があります。");
-    }
-    const examInputData = JSON.parse(strJuken) || [];
-
-    // 設定値（最大件数や選択肢）を取得してチェック
-    const settings = getSettings();
-    const allowedResults = (JSON.parse(getSheetData(SHEET_NAMES.SEL_GOUHI)) || []).map(row => row[0]);
-    const allowedTypes = (JSON.parse(getSheetData(SHEET_NAMES.SEL_KEITAI)) || []).map(row => row[0]);
-
-    validateInputData(examInputData, settings.inputMax, allowedResults, allowedTypes);
-
-    const examDataSheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.JUKEN_DB);
-
-    // 1. 既存データの論理削除 (DEL_FLAG = TRUE)
-    if (examDataSheet.getLastRow() > 1) {
-      const searchRange = examDataSheet.getRange(2, EXAM_DATA.MAIL_ADDR + 1, examDataSheet.getLastRow() - 1, 1);
-      const finder = searchRange.createTextFinder(mailAddr).matchEntireCell(true);
-      const ranges = finder.findAll();
-
-      if (ranges.length > 0) {
-        const delFlagRanges = ranges.map(range => range.offset(0, 1).getA1Notation());
-        examDataSheet.getRangeList(delFlagRanges).setValue(true);
-      }
-    }
-
-    // 2. 新規データの追加
-    const currentDate = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss');
-    const dataToAdd = [];
-
-    examInputData.forEach(inputRow => {
-      const daigakuCode = String(inputRow[EXAM_DATA.DAIGAKU_CODE]);
-      // クライアント側で削除済み、または無効なデータは追加しない
-      if (!daigakuCode || daigakuCode.length == 0 || inputRow[EXAM_DATA.DEL_FLAG] == true) return;
-
-      inputRow[EXAM_DATA.TIME_STAMP] = currentDate;
-      inputRow[EXAM_DATA.MAIL_ADDR] = mailAddr;
-      inputRow[EXAM_DATA.DEL_FLAG] = false; // 新規データはFalse
-
-      dataToAdd.push(inputRow);
-    });
-
-    if (dataToAdd.length > 0) {
-      examDataSheet.getRange(examDataSheet.getLastRow() + 1, 1, dataToAdd.length, dataToAdd[0].length).setValues(dataToAdd);
-    }
-
-  } catch (e) {
-    console.error('saveExamDataListでエラー: ' + e);
-    // エラーメッセージを詳細化
-    if (e.message && e.message.includes('他のユーザーが編集中')) {
-      throw e; // タイムアウトメッセージをそのまま返す
-    } else if (e.message && e.message.includes('保存権限')) {
-      throw e; // 権限エラーメッセージをそのまま返す
-    } else {
-      throw new Error('データの保存に失敗しました。時間をおいて再度お試しください。');
-    }
-  } finally {
-    if (hasLock) {
-      try {
-        lock.releaseLock();
-      } catch (e) {
-        console.warn('ロックの解放に失敗しました:', e);
-        // ロック解放エラーは無視（自動的に解放される）
-      }
-    }
-    SpreadsheetApp.flush();
-  }
-}
-*/
-/*
-// 全データ書き換えバージョン
-function saveExamDataList(strJuken, mailAddr = myMailAddress) {
-  const lock = LockService.getDocumentLock(); // スプレッドシート単位でロック
-  try {
-    lock.waitLock(30000); // 30秒待機
-    if (!isValidUser(mailAddr)) {
-      throw new Error("保存権限がありません。不正なアクセスの可能性があります。");
-    }
-    const examInputData = JSON.parse(strJuken);
-    
-    // 設定値（最大件数や選択肢）を取得してチェック
-    const settings = getSettings();
-    const allowedResults = JSON.parse(getSheetData(SHEET_NAMES.SEL_GOUHI)).map(row => row[0]);
-    const allowedTypes = JSON.parse(getSheetData(SHEET_NAMES.SEL_KEITAI)).map(row => row[0]);
-    
-    validateInputData(examInputData, settings.inputMax, allowedResults, allowedTypes);
-    
-    // データ保存処理
-    const examDataSheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.JUKEN_DB);
-    const allData = examDataSheet.getDataRange().getValues();
-    const header = allData.shift(); // ヘッダーを分離（未使用）
-    const savedJukenData = allData.filter(row => row[EXAM_DATA.MAIL_ADDR] == mailAddr);
-    const otherStudentsData = allData.filter(row => row[EXAM_DATA.MAIL_ADDR] != mailAddr);
-    const finalData = [];
-    const arrCompareItems = [EXAM_DATA.GOUHI, EXAM_DATA.KEITAI, EXAM_DATA.SHINGAKU];
-    const currentDate = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss');
-    
-    examInputData.forEach(inputRow => {
-      const daigakuCode = String(inputRow[EXAM_DATA.DAIGAKU_CODE]);
-      if (!daigakuCode || daigakuCode.length == 0 || inputRow[EXAM_DATA.DEL_FLAG] == true) return;
-      let strDate = currentDate;
-      const savedRow = savedJukenData.find(row => String(inputRow[EXAM_DATA.DAIGAKU_CODE]) == String(row[EXAM_DATA.DAIGAKU_CODE]))
-      if (savedRow) {
-        if (arrCompareItems.every(item => String(inputRow[item]) == String(savedRow[item]))) {
-          strDate = savedRow[EXAM_DATA.TIME_STAMP];
-        }
-      }
-      inputRow[EXAM_DATA.TIME_STAMP] = strDate;
-      inputRow[EXAM_DATA.MAIL_ADDR] = mailAddr;
-      finalData.push(inputRow);
-    });
-    
-    const dataToWrite = otherStudentsData.concat(finalData);
-    if (examDataSheet.getLastRow() > 1) {
-      examDataSheet.getRange(2, 1, examDataSheet.getLastRow() - 1, examDataSheet.getLastColumn()).clearContent();
-    }
-    if (dataToWrite.length > 0) {
-      examDataSheet.getRange(2, 1, dataToWrite.length, dataToWrite[0].length).setValues(dataToWrite);
-    }
-  } catch (e) {
-    console.error('saveExamDataListでエラーまたはロックタイムアウト: ' + e);
-    throw new Error('データの保存に失敗しました。時間をおいて再度お試しください。');
-  } finally {
-    lock.releaseLock();
-    SpreadsheetApp.flush();
-  }
-}
-*/
+//--------------------------------------------------------------------------------
+// 3-4. PDF作成・メール送信
+//--------------------------------------------------------------------------------
 // PDF作成・メール送信 (調査書交付願)
 function sendPdf(mailAddr = myMailAddress) {
   let ssOutput = null;
@@ -633,20 +501,17 @@ function sendPdf(mailAddr = myMailAddress) {
     const crrDate = new Date();
     const suffix = Utilities.formatDate(crrDate, 'Asia/Tokyo', 'yyyyMMddHHmmss');
     const ssName = '調査書交付願' + suffix; // 一時ファイル名
-
     // 一時ファイルを作成
     ssOutput = SpreadsheetApp.create(ssName);
     ssOutputID = ssOutput.getId();
     const srcsheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.PDF_TEMPLATE);
     const sheetOutput = srcsheet.copyTo(ssOutput);
     const sheetOutputID = sheetOutput.getSheetId();
-
     // 日時埋め込み
     const dateRange = sheetOutput.getRange("P2");
     dateRange.setNumberFormat('@');
     dateRange.setHorizontalAlignment('right');
     dateRange.setValue(Utilities.formatDate(crrDate, 'Asia/Tokyo', 'yyyy年MM月dd日 HH時mm分'));
-
     // 生徒データ埋め込み
     const sheetStudents = activeSpreadsheet.getSheetByName(SHEET_NAMES.STUDENTS);
     const mailList = sheetStudents.getRange(1, 1, sheetStudents.getLastRow(), 1).getValues().flat();
@@ -655,7 +520,6 @@ function sendPdf(mailAddr = myMailAddress) {
     const colsStudent = sheetStudents.getLastColumn();
     studentData.push(sheetStudents.getRange(1, 1, 1, colsStudent).getValues().flat());
     studentData.push(sheetStudents.getRange(idx + 1, 1, 1, colsStudent).getValues().flat());
-
     const pRange = sheetOutput.getRange('G4:P8');
     let setDataList = pRange.getValues();
     for (let i = 0; i < studentData[0].length; i++) {
@@ -663,16 +527,14 @@ function sendPdf(mailAddr = myMailAddress) {
     }
     pRange.setNumberFormat('@');
     pRange.setValues(setDataList);
-
     // 受験データ埋め込み
     const examDataSheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.JUKEN_DB);
     const allExamData = examDataSheet.getDataRange().getValues();
-    const examData = allExamData.filter(row => row[EXAM_DATA.MAIL_ADDR] == mailAddr && row[EXAM_DATA.DEL_FLAG] != true);
+    const examData = allExamData.filter(row => row[EXAM_DATA.MAIL_ADDR] == mailAddr && isTrue(row[EXAM_DATA.DEL_FLAG]) !== true);
     const universitySheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.DAIGAKU);
     const allUniversityData = universitySheet.getRange(2, 1, universitySheet.getLastRow() - 1, universitySheet.getLastColumn()).getValues();
     const jRange = sheetOutput.getRange("A11:F40");
     const arrOutput = jRange.getValues();
-
     for (let i = 0; i < examData.length; i++) {
       let universityCode = examData[i][EXAM_DATA.DAIGAKU_CODE];
       let universityData = allUniversityData.find(arr => arr[0] == universityCode);
@@ -687,14 +549,12 @@ function sendPdf(mailAddr = myMailAddress) {
     }
     jRange.setValues(arrOutput);
     SpreadsheetApp.flush();
-
     // メール送信
     const settings = getSettings()
     const title = `${settings.pageTitle}-${studentData[1][STUDENT_DATA.NAME]}`;
     const message = settings.mailMessage;
     const attachmentfiles = [];
-    attachmentfiles.push(createSheetPDF(ssName, ssOutputID, sheetOutputID, "true"));
-
+    attachmentfiles.push(createSheetPDF(ssName, ssOutputID, sheetOutputID, true));
     GmailApp.sendEmail(myMailAddress, title, message, {
       name: '開智学園',
       attachments: attachmentfiles
@@ -705,7 +565,7 @@ function sendPdf(mailAddr = myMailAddress) {
   } finally {
     if (ssOutputID) {
       try {
-        DriveApp.getFileById(ssOutputID).setTrashed(true);
+        DriveApp.getFileById(ssOutputID).setTrashed(true); // setTrashed(trashed: Boolean)
       } catch (e) {
         console.warn("一時ファイルの削除に失敗しました: " + ssOutputID);
       }
@@ -722,12 +582,11 @@ function getSettings() {
   return {
     pageTitle: values[0][1] || "",
     inputMax: values[1][1] || 0,
-    inputEnable: values[2][1],
+    inputEnable: isTrue(values[2][1]), // APIの戻り値は文字列
     mailTitle: values[3][1] || "",
     mailMessage: values[4][1] || ""
   };
 }
-
 // 権限チェック用ヘルパー (本人が操作しているか、または教員が操作しているかを確認)
 function isValidUser(targetMailAddr) {
   const currentUser = Session.getActiveUser().getEmail();
@@ -743,9 +602,11 @@ function isValidUser(targetMailAddr) {
   }
   return false;
 }
-
 // 入力データ整合性チェック用ヘルパー
-function validateInputData(data, maxCount, allowedResults, allowedTypes) {
+function validateInputData(data) {
+  const maxCount = getSettings().inputMax;
+  const allowedResults = (getSheetDataApiWithCache(SHEET_NAMES.SEL_GOUHI) || []).map(row => row[0] || "");
+  const allowedTypes = (getSheetDataApiWithCache(SHEET_NAMES.SEL_KEITAI) || []).map(row => row[0] || "");
   if (!Array.isArray(data)) {
     throw new Error("データ形式が不正です。");
   }
@@ -763,7 +624,6 @@ function validateInputData(data, maxCount, allowedResults, allowedTypes) {
     }
   });
 }
-
 // 日付フォーマット変換ヘルパー
 function convertIfDate(data, format) {
   if (Object.prototype.toString.call(data) == '[object Date]') {
@@ -771,7 +631,6 @@ function convertIfDate(data, format) {
   }
   return data
 }
-
 // スプレッドシートのPDF化ヘルパー
 function createSheetPDF(ssName, ssID, sheetID, portrait) {
   const token = ScriptApp.getOAuthToken();
@@ -794,39 +653,19 @@ function getUniversityDataApi() {
     const spreadsheetId = activeSpreadsheet.getId();
     const sheet = activeSpreadsheet.getSheetByName(sheetName);
     const lastRow = sheet.getLastRow();
-
     // 実際のデータ行数のみを取得（ヘッダー行をスキップ）
     if (lastRow <= 1) {
       return []; // データがない場合
     }
-
-    // 範囲指定：A2からB列の最終行まで
-    const rangeName = `'${sheetName}'!A2:B${lastRow}`;
-
-    // Sheets API を直接叩いて値を取得
-    const response = Sheets.Spreadsheets.Values.get(spreadsheetId, rangeName);
-    const data = response.values || [];
-
-    return data;
+    const rangeName = `'${sheetName}'!A2:B${lastRow}`; // 範囲指定：A2からB列の最終行まで
+    const response = Sheets.Spreadsheets.Values.get(spreadsheetId, rangeName); // Sheets API を直接叩いて値を取得
+    return response.values || [];
   } catch (e) {
     console.error(e);
     throw new Error("API取得エラー: " + e.message);
   }
 }
-
-// シートデータの取得
-function getSheetData(sheetName) {
-  try {
-    const objSheet = activeSpreadsheet.getSheetByName(sheetName);
-    const allData = objSheet.getRange(2, 1, objSheet.getLastRow() - 1, objSheet.getLastColumn()).getValues();
-    const jsonString = JSON.stringify(allData);
-    return jsonString;
-  } catch (e) {
-    console.error('getSheetDataでエラー: ' + e);
-    throw new Error('作成者に連絡してください。');
-  }
-}
-
+// シートデータの取得キャッシュ付き
 function getSheetDataApiWithCache(sheetName) {
   const cache = CacheService.getScriptCache();
   const cacheKey = sheetName;
@@ -838,7 +677,7 @@ function getSheetDataApiWithCache(sheetName) {
   cache.put(cacheKey, JSON.stringify(data), 21600);
   return data;
 }
-
+// シートデータの取得
 function getSheetDataApi(sheetName) {
   try {
     const spreadsheetId = activeSpreadsheet.getId();
@@ -864,7 +703,7 @@ function getSheetDataApi(sheetName) {
 // 6. 管理者・メンテナンス用関数 ※ メニューバーから実行される関数群
 //================================================================================
 // 校内DB用データの生成
-function createData() {
+function createData() { // API不使用のためboolean対策なし
   const sheetDB = activeSpreadsheet.getSheetByName(SHEET_NAMES.KOUNAI_DB);
   const universitySheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.DAIGAKU);
   const sheetJuken = activeSpreadsheet.getSheetByName(SHEET_NAMES.JUKEN_DB);
@@ -878,7 +717,7 @@ function createData() {
   allStudentsData.forEach(strow => {
     const outst = [strow[STUDENT_DATA.GRADE], strow[STUDENT_DATA.CLASS], strow[STUDENT_DATA.NUMBER], strow[STUDENT_DATA.NAME]]
     // 変数宣言 const を追加しました
-    const examData = allExamData.filter(jrow => jrow[EXAM_DATA.MAIL_ADDR] == strow[STUDENT_DATA.MAIL_ADDR] && jrow[EXAM_DATA.DEL_FLAG] == false)
+    const examData = allExamData.filter(jrow => jrow[EXAM_DATA.MAIL_ADDR] == strow[STUDENT_DATA.MAIL_ADDR] && isTrue(jrow[EXAM_DATA.DEL_FLAG]) == false)
     examData.forEach(jrow => {
       const outj = [
         jrow[EXAM_DATA.DAIGAKU_CODE],
@@ -896,15 +735,13 @@ function createData() {
     sheetDB.getRange(2, 1, sheetData.length, sheetData[0].length).setValues(sheetData);
   }
 }
-
 // 削除マークのついた行を完全削除
 function queryDeleteMarkedRows() {
   const dialogResult = Browser.msgBox("削除マークの付いた行を完全に削除します。よろしいですか？", Browser.Buttons.YES_NO);
   if (dialogResult != 'yes') return;
   deleteMarkedRows();
 }
-
-function deleteMarkedRows() {
+function deleteMarkedRows() { // API不使用のためboolean対策なし
   const lock = LockService.getDocumentLock(); // スプレッドシート単位でロック
   try {
     lock.waitLock(120000); // 120秒待機
@@ -923,8 +760,6 @@ function deleteMarkedRows() {
     SpreadsheetApp.flush();
   }
 }
-
-
 // 大学データのクリア
 function clearUniversityData() {
   const dialogResult = Browser.msgBox("大学データを消去します。\\n\\nよろしいですか？", Browser.Buttons.YES_NO);
@@ -936,7 +771,6 @@ function clearUniversityData() {
   universitySheet.appendRow(outputHeader);
   Browser.msgBox("消去が完了しました。");
 }
-
 // Benesseデータのインポート
 function importUniversityData() {
   const dialogResult = Browser.msgBox("現在のシートから大学データを追記ます。\\n既存のデータは上書きされます。\\n\\nよろしいですか？", Browser.Buttons.YES_NO);

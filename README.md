@@ -1,6 +1,6 @@
 # 受験校調査アプリ (Preferred School Survey System)
 
-[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)](./VERSION_CHANGES.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 
@@ -151,20 +151,11 @@ juken-survey/
 ├── css.html             # スタイルシート (CSS)
 ├── script.html          # クライアントサイドロジック (JavaScript)
 ├── appsscript.json      # GASマニフェストファイル
-├── .clasp.json          # clasp設定ファイル
-│
 ├── README.md            # 本ドキュメント
 ├── PROGRAM_SPECIFICATION.md  # プログラム詳細仕様
 ├── TEACHER_MANUAL.md    # 教員向け操作マニュアル
 ├── STUDENT_MANUAL.md    # 生徒向け操作マニュアル
-├── VERSION_CHANGES.md   # バージョン変更履歴
-│
-└── 1.0.0/               # 旧バージョン (v1.0.0) バックアップ
-    ├── main.js
-    ├── index.html
-    ├── css.html
-    ├── script.html
-    └── appsscript.json
+└── VERSION_CHANGES.md   # バージョン変更履歴
 ```
 
 ---
@@ -202,6 +193,6 @@ copies or substantial portions of the Software.
 
 <div align="center">
 
-**Made with ❤️ for Education**
+**Made for Education**
 
 </div>
