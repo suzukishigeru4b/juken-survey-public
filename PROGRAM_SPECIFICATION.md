@@ -1,6 +1,6 @@
 # プログラム仕様書
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](./VERSION_CHANGES.md)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 [![For](https://img.shields.io/badge/対象-開発者-red.svg)](#)
 
@@ -239,8 +239,8 @@ flowchart TD
 
 | 機能 | 説明 |
 |:---|:---|
-| **排他制御** | `LockService` で同時書き込みを防止 |
-| **バリデーション** | 入力件数、選択肢の正当性チェック |
+| **排他制御** | `LockService` で同時書き込みを防止 (待機時間等の最適化) |
+| **バリデーション** | 入力件数、選択肢の正当性チェック (設定・マスタはキャッシュ利用) |
 | **更新方式** | 差分更新（変更行のみ） |
 | **削除方式** | 論理削除（削除フラグ） |
 
@@ -294,6 +294,7 @@ sequenceDiagram
 | `createData()` | 校内DB用データを生成 |
 | `importUniversityData()` | Benesseデータをインポート |
 | `getUniversityDataApi()` | 大学コードマスタを取得（キャッシュ対応） |
+| `getSheetDataApiWithCache(sheetName)` | シートデータを取得してキャッシュ (設定・選択肢用) |
 
 ---
 

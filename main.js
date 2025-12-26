@@ -247,7 +247,6 @@ function getStudentsList() {
 function getUniversityDataList() {
   try {
     // キャッシュ確認
-    //return getSheetData(SHEET_NAMES.DAIGAKU)
     return JSON.stringify(getUniversityDataApi());
   } catch (e) {
     console.error('getUniversityDataListでエラー: ' + e);
@@ -299,6 +298,141 @@ function getExamDataList(mailAddr = myMailAddress) {
 
 // 受験データの保存 (バリデーション付き・最適化版)
 function saveExamDataList(strJuken, mailAddr = myMailAddress) {
+  // バリデーション
+  if (!isValidUser(mailAddr)) {
+    throw new Error("保存権限がありません。不正なアクセスの可能性があります。");
+  }
+  const examInputData = JSON.parse(strJuken) || [];
+  // 設定値（最大件数や選択肢）を取得してチェック
+  const settings = getSettings();
+  const allowedResults = (getSheetDataApiWithCache(SHEET_NAMES.SEL_GOUHI) || []).map(row => row[0] || "");
+  const allowedTypes = (getSheetDataApiWithCache(SHEET_NAMES.SEL_KEITAI) || []).map(row => row[0] || "");
+  // 削除フラグが立っていないデータのみを抽出してバリデーション
+  const activeExamData = examInputData.filter(row => row[EXAM_DATA.DEL_FLAG] != true);
+  validateInputData(activeExamData, settings.inputMax, allowedResults, allowedTypes);
+  const currentDate = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss');
+  // 1. 既存データの取得とマップ化 (Sheets APIによる最適化された取得)
+  const existingDataMap = new Map();
+  const spreadsheetId = activeSpreadsheet.getId();
+
+  // A. メールアドレス列(Col B)を一括取得して検索
+  // B2:B の範囲を取得
+  const indexRange = `'${SHEET_NAMES.JUKEN_DB}'!B2:D`; // row[0]:mailAddr, row[1]:delFlag, row[2]:daigakuCode;
+  const mailResponse = Sheets.Spreadsheets.Values.get(spreadsheetId, indexRange);
+  const mailValues = mailResponse.values || [];
+  const matchedRowIndices = [];
+  mailValues.forEach((row, index) => {
+    // row[0] がメールアドレス
+    if (row[0] === mailAddr) {
+      // index は 0-based で B2 スタートなので、実際の行番号は index + 2
+      matchedRowIndices.push(index + 2);
+    }
+  });
+
+  // B. 対象行のデータ取得 (BatchGet)
+  if (matchedRowIndices.length > 0) {
+    // 取得する範囲のリストを作成 (例: '受験校DB!A10:H10')
+    // 最終列は H (index 7) なので、H列まで取得すれば十分
+    // ※ EXAM_DATA.SHINGAKU が 7 なので Column H corresponds to index 7 (A=0, H=7 ? No. A=1 in A1 notation, index 0 in array)
+    // EXAM_DATA values are 0-based indices for array access.
+    // Column H is the 8th column.
+    const sheetName = SHEET_NAMES.JUKEN_DB;
+    const ranges = matchedRowIndices.map(rowIndex => `'${sheetName}'!A${rowIndex}:H${rowIndex}`);
+
+    const batchResponse = Sheets.Spreadsheets.Values.batchGet(spreadsheetId, { ranges: ranges });
+    const valueRanges = batchResponse.valueRanges || [];
+
+    valueRanges.forEach((valueRange, i) => {
+      if (valueRange.values && valueRange.values.length > 0) {
+        const rowValues = valueRange.values[0];
+        const rowIndex = matchedRowIndices[i];
+
+        // 削除フラグがTrueでないもののみマップに追加
+        if (String(rowValues[EXAM_DATA.DEL_FLAG]).toLowerCase() !== "true") {
+          existingDataMap.set(String(rowValues[EXAM_DATA.DAIGAKU_CODE]), {
+            rowIndex: rowIndex,
+            data: rowValues
+          });
+        }
+      }
+    });
+  }
+
+  const dataToAdd = [];
+  const dataToUpdate = []; // 更新リクエストのリスト (ValueRange objects)
+
+  // 2. 入力データの処理 (更新・新規・論理削除)
+  examInputData.forEach(inputRow => {
+    const daigakuCode = String(inputRow[EXAM_DATA.DAIGAKU_CODE]);
+    if (!daigakuCode) return;
+
+    const existingRecord = existingDataMap.get(daigakuCode);
+
+    // A. クライアント側で削除指示 (DEL_FLAG = true)
+    if (String(inputRow[EXAM_DATA.DEL_FLAG]).toLowerCase() === "true") {
+      if (existingRecord) {
+        // 既存にあれば削除フラグを立てる (Sheets API batchUpdate用)
+        // Range: シート名!C<行番号>
+        const range = `'${SHEET_NAMES.JUKEN_DB}'!A${existingRecord.rowIndex}:C${existingRecord.rowIndex}`;
+        dataToUpdate.push({
+          range: range,
+          values: [[currentDate, mailAddr, "TRUE"]]
+        });
+        existingDataMap.delete(daigakuCode); // 処理済みとしてMapから削除
+      }
+      return; // 新規追加もしない
+    }
+    // B. 既存データの更新 または 変更なし
+    if (existingRecord) {
+      // 比較対象のカラム: 合否, 受験形態, 進学, (大学コードはキーなので一致), (大学名はマスタ依存だが一応確認?)
+      // ここでは編集可能な主要項目を比較
+      const isChanged =
+        String(existingRecord.data[EXAM_DATA.GOUHI]) !== String(inputRow[EXAM_DATA.GOUHI]) ||
+        String(existingRecord.data[EXAM_DATA.KEITAI]) !== String(inputRow[EXAM_DATA.KEITAI]) ||
+        String(existingRecord.data[EXAM_DATA.SHINGAKU]).toLowerCase() !== String(inputRow[EXAM_DATA.SHINGAKU]).toLowerCase(); // boolean
+      if (isChanged) {
+        const updateRow = [...existingRecord.data]; // 既存データをコピー
+        updateRow[EXAM_DATA.TIME_STAMP] = currentDate; // 更新日時
+        updateRow[EXAM_DATA.DAIGAKU_NAME] = inputRow[EXAM_DATA.DAIGAKU_NAME];
+        updateRow[EXAM_DATA.GOUHI] = inputRow[EXAM_DATA.GOUHI];
+        updateRow[EXAM_DATA.KEITAI] = inputRow[EXAM_DATA.KEITAI];
+        updateRow[EXAM_DATA.SHINGAKU] = String(inputRow[EXAM_DATA.SHINGAKU]).toUpperCase();
+        const range = `'${SHEET_NAMES.JUKEN_DB}'!A${existingRecord.rowIndex}:H${existingRecord.rowIndex}`;
+        dataToUpdate.push({
+          range: range,
+          values: [updateRow]
+        });
+      }
+      // 変更なしの場合は何もしないで処理済みにする
+      existingDataMap.delete(daigakuCode); // 処理済みとしてMapから削除
+    } else {
+      // C. 新規追加
+      const newRow = [];
+      newRow[EXAM_DATA.TIME_STAMP] = currentDate;
+      newRow[EXAM_DATA.MAIL_ADDR] = mailAddr;
+      newRow[EXAM_DATA.DEL_FLAG] = "FALSE";
+      newRow[EXAM_DATA.DAIGAKU_CODE] = inputRow[EXAM_DATA.DAIGAKU_CODE];
+      newRow[EXAM_DATA.DAIGAKU_NAME] = inputRow[EXAM_DATA.DAIGAKU_NAME];
+      newRow[EXAM_DATA.GOUHI] = inputRow[EXAM_DATA.GOUHI];
+      newRow[EXAM_DATA.KEITAI] = inputRow[EXAM_DATA.KEITAI];
+      newRow[EXAM_DATA.SHINGAKU] = String(inputRow[EXAM_DATA.SHINGAKU]).toUpperCase();
+      dataToAdd.push(newRow);
+    }
+  });
+  // 3. 入力データに存在しなかった既存データ (削除されたとみなす)
+  // existingDataMap に残っているデータは、クライアントからのリストに含まれていなかったもの
+  if (existingDataMap.size > 0) {
+    existingDataMap.forEach((record) => {
+      // Range: シート名!A<行番号>:C<行番号>
+      const range = `'${SHEET_NAMES.JUKEN_DB}'!A${record.rowIndex}:C${record.rowIndex}`;
+      dataToUpdate.push({
+        range: range,
+        values: [[currentDate, mailAddr, true]]
+      });
+    });
+  }
+
+  // 4-1. 更新の一括実行 (batchUpdate)
   const lock = LockService.getDocumentLock(); // スプレッドシート単位でロック
   let hasLock = false; // フラグの初期化
   try {
@@ -307,157 +441,6 @@ function saveExamDataList(strJuken, mailAddr = myMailAddress) {
     if (!hasLock) {
       throw new Error('他のユーザーが編集中です。少し待ってから再度お試しください。');
     }
-
-    if (!isValidUser(mailAddr)) {
-      throw new Error("保存権限がありません。不正なアクセスの可能性があります。");
-    }
-    const examInputData = JSON.parse(strJuken) || [];
-
-    // 設定値（最大件数や選択肢）を取得してチェック
-    const settings = getSettings();
-    const allowedResults = (getSheetDataApi(SHEET_NAMES.SEL_GOUHI) || []).map(row => row[0] || "");
-    const allowedTypes = (getSheetDataApi(SHEET_NAMES.SEL_KEITAI) || []).map(row => row[0] || "");
-
-    // 削除フラグが立っていないデータのみを抽出してバリデーション
-    const activeExamData = examInputData.filter(row => row[EXAM_DATA.DEL_FLAG] != true);
-    validateInputData(activeExamData, settings.inputMax, allowedResults, allowedTypes);
-
-    const examDataSheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.JUKEN_DB);
-    const currentDate = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm:ss');
-
-    // 1. 既存データの取得とマップ化 (Sheets APIによる最適化された取得)
-    const existingDataMap = new Map();
-    const spreadsheetId = activeSpreadsheet.getId();
-
-    // A. メールアドレス列(Col B)を一括取得して検索
-    // B2:B の範囲を取得
-    const mailAddrRange = `'${SHEET_NAMES.JUKEN_DB}'!B2:B`;
-    const mailResponse = Sheets.Spreadsheets.Values.get(spreadsheetId, mailAddrRange);
-    const mailValues = mailResponse.values || [];
-
-    const matchedRowIndices = [];
-    mailValues.forEach((row, index) => {
-      // row[0] がメールアドレス
-      if (row[0] === mailAddr) {
-        // index は 0-based で B2 スタートなので、実際の行番号は index + 2
-        matchedRowIndices.push(index + 2);
-      }
-    });
-
-    // B. 対象行のデータ取得 (BatchGet)
-    if (matchedRowIndices.length > 0) {
-      // 取得する範囲のリストを作成 (例: '受験校DB!A10:H10')
-      // 最終列は H (index 7) なので、H列まで取得すれば十分
-      // ※ EXAM_DATA.SHINGAKU が 7 なので Column H corresponds to index 7 (A=0, H=7 ? No. A=1 in A1 notation, index 0 in array)
-      // EXAM_DATA values are 0-based indices for array access.
-      // Column H is the 8th column.
-      const sheetName = SHEET_NAMES.JUKEN_DB;
-      const ranges = matchedRowIndices.map(rowIndex => `'${sheetName}'!A${rowIndex}:H${rowIndex}`);
-
-      const batchResponse = Sheets.Spreadsheets.Values.batchGet(spreadsheetId, { ranges: ranges });
-      const valueRanges = batchResponse.valueRanges || [];
-
-      valueRanges.forEach((valueRange, i) => {
-        if (valueRange.values && valueRange.values.length > 0) {
-          const rowValues = valueRange.values[0];
-          const rowIndex = matchedRowIndices[i];
-
-          // 削除フラグがTrueでないもののみマップに追加
-          if (rowValues[EXAM_DATA.DEL_FLAG] != true) {
-            existingDataMap.set(String(rowValues[EXAM_DATA.DAIGAKU_CODE]), {
-              rowIndex: rowIndex,
-              data: rowValues
-            });
-          }
-        }
-      });
-    }
-
-    const dataToAdd = [];
-    const dataToUpdate = []; // 更新リクエストのリスト (ValueRange objects)
-
-    // 2. 入力データの処理 (更新・新規・論理削除)
-    examInputData.forEach(inputRow => {
-      const daigakuCode = String(inputRow[EXAM_DATA.DAIGAKU_CODE]);
-      if (!daigakuCode) return;
-
-      const existingRecord = existingDataMap.get(daigakuCode);
-
-      // A. クライアント側で削除指示 (DEL_FLAG = true)
-      if (inputRow[EXAM_DATA.DEL_FLAG] == true) {
-        if (existingRecord) {
-          // 既存にあれば削除フラグを立てる (Sheets API batchUpdate用)
-          // Range: シート名!C<行番号>
-          const range = `'${SHEET_NAMES.JUKEN_DB}'!A${existingRecord.rowIndex}:C${existingRecord.rowIndex}`;
-          dataToUpdate.push({
-            range: range,
-            values: [[currentDate, mailAddr, true]]
-          });
-          existingDataMap.delete(daigakuCode); // 処理済みとしてMapから削除
-        }
-        return; // 新規追加もしない
-      }
-
-      // B. 既存データの更新 または 変更なし
-      if (existingRecord) {
-        // 比較対象のカラム: 合否, 受験形態, 進学, (大学コードはキーなので一致), (大学名はマスタ依存だが一応確認?)
-        // ここでは編集可能な主要項目を比較
-        const isChanged =
-          String(existingRecord.data[EXAM_DATA.GOUHI]) !== String(inputRow[EXAM_DATA.GOUHI]) ||
-          String(existingRecord.data[EXAM_DATA.KEITAI]) !== String(inputRow[EXAM_DATA.KEITAI]) ||
-          String(existingRecord.data[EXAM_DATA.SHINGAKU]).toLowerCase() !== String(inputRow[EXAM_DATA.SHINGAKU]).toLowerCase(); // boolean
-        if (isChanged) {
-          // 変更がある場合のみ更新
-          // 安全のため、値を再構築
-          const updateRow = [...existingRecord.data]; // 既存データをコピー
-          updateRow[EXAM_DATA.TIME_STAMP] = currentDate; // 更新日時
-          updateRow[EXAM_DATA.GOUHI] = inputRow[EXAM_DATA.GOUHI];
-          updateRow[EXAM_DATA.KEITAI] = inputRow[EXAM_DATA.KEITAI];
-          updateRow[EXAM_DATA.SHINGAKU] = inputRow[EXAM_DATA.SHINGAKU];
-          // 大学名なども更新された可能性があるなら反映
-          updateRow[EXAM_DATA.DAIGAKU_NAME] = inputRow[EXAM_DATA.DAIGAKU_NAME];
-          // 行全体を更新 (行番号, 1列目, 1行, カラム数)
-          // Range: シート名!A<行番号>:H<行番号> (H列まで)
-          const range = `'${SHEET_NAMES.JUKEN_DB}'!A${existingRecord.rowIndex}:H${existingRecord.rowIndex}`;
-          dataToUpdate.push({
-            range: range,
-            values: [updateRow]
-          });
-        }
-
-        // 変更なしの場合は何もしない
-
-        existingDataMap.delete(daigakuCode); // 処理済みとしてMapから削除
-
-      } else {
-        // C. 新規追加
-        const newRow = [];
-        newRow[EXAM_DATA.TIME_STAMP] = currentDate;
-        newRow[EXAM_DATA.MAIL_ADDR] = mailAddr;
-        newRow[EXAM_DATA.DEL_FLAG] = false;
-        newRow[EXAM_DATA.DAIGAKU_CODE] = inputRow[EXAM_DATA.DAIGAKU_CODE];
-        newRow[EXAM_DATA.DAIGAKU_NAME] = inputRow[EXAM_DATA.DAIGAKU_NAME];
-        newRow[EXAM_DATA.GOUHI] = inputRow[EXAM_DATA.GOUHI];
-        newRow[EXAM_DATA.KEITAI] = inputRow[EXAM_DATA.KEITAI];
-        newRow[EXAM_DATA.SHINGAKU] = inputRow[EXAM_DATA.SHINGAKU];
-        dataToAdd.push(newRow);
-      }
-    });
-
-    // 3. 入力データに存在しなかった既存データ (削除されたとみなす)
-    // existingDataMap に残っているデータは、クライアントからのリストに含まれていなかったもの
-    if (existingDataMap.size > 0) {
-      existingDataMap.forEach((record) => {
-        // Range: シート名!C<行番号>
-        const range = `'${SHEET_NAMES.JUKEN_DB}'!A${record.rowIndex}:C${record.rowIndex}`;
-        dataToUpdate.push({
-          range: range,
-          values: [[currentDate, mailAddr, true]]
-        });
-      });
-    }
-
-    // 4-1. 更新の一括実行 (batchUpdate)
     if (dataToUpdate.length > 0) {
       Sheets.Spreadsheets.Values.batchUpdate({
         valueInputOption: 'USER_ENTERED',
@@ -735,7 +718,7 @@ function sendPdf(mailAddr = myMailAddress) {
 //================================================================================
 // 設定データの取得
 function getSettings() {
-  const values = getSheetDataApi(SHEET_NAMES.SETTINGS) || []
+  const values = getSheetDataApiWithCache(SHEET_NAMES.SETTINGS) || []
   return {
     pageTitle: values[0][1] || "",
     inputMax: values[1][1] || 0,
@@ -753,7 +736,7 @@ function isValidUser(targetMailAddr) {
     return true;
   }
   // 2. 他人のデータを保存しようとしている場合、実行者が「教員」かチェック
-  const arrAllTeachers = getSheetDataApi(SHEET_NAMES.TEACHERS) || [];
+  const arrAllTeachers = getSheetDataApiWithCache(SHEET_NAMES.TEACHERS) || [];
   const isTeacher = arrAllTeachers.some(row => row[0] == currentUser);
   if (isTeacher) {
     return true; // 教員なら他人のデータも保存OK
@@ -842,6 +825,18 @@ function getSheetData(sheetName) {
     console.error('getSheetDataでエラー: ' + e);
     throw new Error('作成者に連絡してください。');
   }
+}
+
+function getSheetDataApiWithCache(sheetName) {
+  const cache = CacheService.getScriptCache();
+  const cacheKey = sheetName;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    return JSON.parse(cached);
+  }
+  const data = getSheetDataApi(sheetName);
+  cache.put(cacheKey, JSON.stringify(data), 21600);
+  return data;
 }
 
 function getSheetDataApi(sheetName) {

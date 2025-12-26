@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
   <base target="_top">
-  <meta charset="utf-8"/>
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <?!= include('css.html'); ?>
 </head>
@@ -25,8 +26,14 @@
       </section>
 
       <section id="selectorSection" class="selector-section">
-        <div id="classSelectionContainer" class="class-select-div"></div>
-        <div id="studentNumberSelectionContainer" class="number-select-div"></div>
+        <div id="classSelectionContainer" class="class-select-div">
+          <span id="classSelectionLabel" class="class-selection-label"></span>
+          <select id="classSelection" class="class-selection"></select>
+        </div>
+        <div id="studentNumberSelectionContainer" class="number-select-div">
+          <span id="studentNumberSelectionLabel" class="student-number-selection-label"></span>
+          <select id="studentNumberSelection" class="student-number-selection"></select>
+        </div>
       </section>
 
       <section id="inputSection" class="input-section">
@@ -56,8 +63,9 @@
 
   <div id="searchBackground" class="search-background is-hidden">
     <div id="searchBody" class="search-body">
-      <div class="header">
+      <div class="header search-header">
         <h1 class="header-title">大学検索</h1>
+        <div id="searchMessage" class="search-message"></div>
       </div>
       <div class="search-area">
         <div class="input-frame">

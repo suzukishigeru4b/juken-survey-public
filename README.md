@@ -1,6 +1,6 @@
 # 受験校調査アプリ (Preferred School Survey System)
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](./VERSION_CHANGES.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 
@@ -37,7 +37,7 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 
 ## ✨ v2.0.0 新機能ハイライト
 
-> **2025年12月リリース** - UIを全面刷新！
+> **2025年12月リリース** - パフォーマンスとUXをさらに向上！
 
 | 改善項目 | 詳細 |
 |:---|:---|
@@ -45,8 +45,9 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 | 🌙 **ダークモード** | `prefers-color-scheme` 対応 |
 | ⚡ **パフォーマンス** | Sheets API `batchGet` による高速初期化 |
 | 📱 **レスポンシブ** | モバイル向けテーブルのグリッド表示 |
-| 💾 **キャッシュ** | 大学データの `localStorage` キャッシュ |
+| 💾 **キャッシュ** | 大学データ(Client)と設定・マスタデータ(Server)のキャッシュ |
 | 🔐 **堅牢性** | null安全処理とバリデーション強化 |
+| 🚀 **高速保存** | 保存時のロック時間短縮と処理効率化 (v2.1.0) |
 
 詳しくは [VERSION_CHANGES.md](./VERSION_CHANGES.md) をご覧ください。
 
@@ -84,7 +85,7 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 
 ### 必須要件
 
-- ✅ **Google アカウント** (Google Workspace 必須)
+- ✅ **Google アカウント** (Google Workspace 推奨)
 - ✅ **Google Chrome** (最新版)
 
 ### 推奨環境
@@ -150,12 +151,20 @@ juken-survey/
 ├── css.html             # スタイルシート (CSS)
 ├── script.html          # クライアントサイドロジック (JavaScript)
 ├── appsscript.json      # GASマニフェストファイル
+├── .clasp.json          # clasp設定ファイル
 │
 ├── README.md            # 本ドキュメント
 ├── PROGRAM_SPECIFICATION.md  # プログラム詳細仕様
 ├── TEACHER_MANUAL.md    # 教員向け操作マニュアル
 ├── STUDENT_MANUAL.md    # 生徒向け操作マニュアル
-└──  VERSION_CHANGES.md   # バージョン変更履歴
+├── VERSION_CHANGES.md   # バージョン変更履歴
+│
+└── 1.0.0/               # 旧バージョン (v1.0.0) バックアップ
+    ├── main.js
+    ├── index.html
+    ├── css.html
+    ├── script.html
+    └── appsscript.json
 ```
 
 ---
@@ -196,5 +205,3 @@ copies or substantial portions of the Software.
 **Made with ❤️ for Education**
 
 </div>
-
-

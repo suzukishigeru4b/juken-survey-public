@@ -18,7 +18,6 @@
   let examDataList = [];
   let dom = {}; // DOMキャッシュ用
 
-
   let universityCodeList = [];
   let isItemChanged = false;
   let isDeleted = false;
@@ -43,11 +42,24 @@
     });
   }
 
+  //================================================================================
+  // 大学データキャッシュのクリア（管理者がデータ更新時に使用）
+  //================================================================================
+  function clearUniversityDataCache() {
+    try {
+      localStorage.removeItem('universityDataCache');
+      localStorage.removeItem('universityDataTimestamp');
+      //console.log('大学データのキャッシュをクリアしました');
+      return true;
+    } catch (e) {
+      console.warn('キャッシュのクリアに失敗しました:', e);
+      return false;
+    }
+  }
 
   //================================================================================
   // UI STATE CONTROL
   //================================================================================
-
   function setElementHidden(elementId, flag) {
     document.getElementById(elementId).classList.toggle('is-hidden', flag);
   }
@@ -68,32 +80,18 @@
     document.querySelectorAll('.button-alert-message').forEach(item => item.textContent = text);
   }
 
-  // 大学データキャッシュのクリア（管理者がデータ更新時に使用）
-  function clearUniversityDataCache() {
-    try {
-      localStorage.removeItem('universityDataCache');
-      localStorage.removeItem('universityDataTimestamp');
-      //console.log('大学データのキャッシュをクリアしました');
-      return true;
-    } catch (e) {
-      console.warn('キャッシュのクリアに失敗しました:', e);
-      return false;
-    }
-  }
-
   function cacheDomElements() {
     const ids = [
       "confirmDialogTitle", "confirmDialogMessage", "confirmDialog",
       "confirmDialogButtonYes", "confirmDialogButtonNo", "headerTitle",
-      "currentUserName", "classSelectionContainer", "studentNumberSelectionContainer",
+      "currentUserName", "classSelection", "studentNumberSelection",
       "progressDialogMessageContainer", "inputTableContainer", "progressDialog", "statusMessage",
       "statusMessage2", "sendFormButton1", "sendFormButton2", "issueReportButton1", "issueReportButton2",
-      "searchTableContainer", "searchButton", "keywordInput", "moveLeftButton",
+      "searchMessage", "searchTableContainer", "searchButton", "keywordInput", "moveLeftButton",
       "moveRightButton", "cancelButton", "searchBackground", "searchBody",
       "examRowTemplate", "sendFormButton1Message", "sendFormButton2Message",
       "displayCountTotal", "displayCountRange", "inputBackground",
-      "selectorSection", "inputSection", "classSelectionContainer", "studentNumberSelectionContainer",
-      "targetStudentName"
+      "selectorSection", "inputSection", "classSelectionContainer", "targetStudentName"
     ];
 
     ids.forEach(id => {
@@ -142,15 +140,14 @@
     const headerTitleEl = dom.headerTitle;
     if (headerTitleEl) headerTitleEl.textContent = allData.headerTitle;
 
-
-    if (allData.userRole == 'teacher') {
+    if (userRole == 'teacher') {
       // 教員モード：生徒一覧を非同期で取得
       setMyName("【教員モード】" + teacherData[1]);
       disableReportButton(true);
-      setElementHidden('selectorSection', false);
+      setElementHidden('selectorSection', true);
       setElementHidden("inputSection", true);
       showProgressDialog(false);
-      setStatusMessage2(" 【教員モード】生徒一覧取得中・・・");
+      setStatusMessage2(" 生徒一覧取得中・・・");
       // 生徒一覧を非同期で取得
       google.script.run
         .withSuccessHandler(studentsJSON => {
@@ -182,23 +179,16 @@
       setElementHidden('inputSection', false);
       setInputTable(); // 空のテーブルを先に表示
 
-      // 受験データローディング中のメッセージを表示
-      //setDialogSpinner(" 志望校データ読込中・・・");
-      //setDialogSpinner(`ようこそ、${currentStudentData[STUDENT_DATA.NAME]} さん`);
-
       // 受験データを非同期で取得
       google.script.run
         .withSuccessHandler(examJSON => {
           examDataList = padRowsWithHeader(JSON.parse(examJSON) || []);
           setInputTable(); // データを反映
           setStatusMessage2("");
-          //showProgressDialog(false);
-          //console.log('受験データの取得が完了しました');
         })
         .withFailureHandler(error => {
           console.error(error);
           setStatusMessage2("");
-          //showProgressDialog(false);
           confirmAsync("エラー", "受験データの取得に失敗しました。<br>詳細: " + error.message);
         })
         .getExamDataList();
@@ -221,6 +211,8 @@
   // 教員ページ生徒選択
   //--------------------------------------------------------------------------------
   function showSelector() {
+    setElementHidden("selectorSection", false);
+    setElementHidden("studentNumberSelectionContainer", true);
     const classes = Array.from(new Set(allStudentsData.map(arr => arr[STUDENT_DATA.CLASS])));
     classes.sort(); // クラス名でソート
     createClassSelector(classes);
@@ -228,15 +220,9 @@
 
   function createClassSelector(arr) {
     // クラス一覧リストボックス
-    const selClassDiv = dom.classSelectionContainer;
-    selClassDiv.replaceChildren(); // または selClassDiv.innerHTML = '';
+    const selectEl = dom.classSelection;
+    selectEl.replaceChildren();
 
-    const label = document.createTextNode('クラス： ');
-    selClassDiv.appendChild(label);
-    const selectEl = document.createElement('select');
-    selectEl.id = 'classSelect';
-    dom.classSelect = selectEl;
-    selectEl.addEventListener('change', createStudentList);
     const defaultOption = document.createElement('option');
     defaultOption.value = '';
     defaultOption.textContent = '選択';
@@ -249,37 +235,34 @@
       option.textContent = className + '組';
       selectEl.appendChild(option);
     });
-    selClassDiv.appendChild(selectEl);
   }
 
   function createStudentList() { // 選択されたクラスの生徒一覧生成
     setElementHidden("inputSection", true);
-    const selClassId = dom.classSelect;
+    const selClassId = dom.classSelection;
     const selClass = selClassId.value;
     const students = allStudentsData.filter(row => row[STUDENT_DATA.CLASS] == selClass);
-    const selNumDiv = dom.studentNumberSelectionContainer;
+    if (students.length == 0) {
+      setElementHidden("studentNumberSelectionContainer", true);
+      return;
+    }
+    setElementHidden("studentNumberSelectionContainer", false);
+    const selNumDiv = dom.studentNumberSelection;
     selNumDiv.replaceChildren();
 
-    const label = document.createTextNode('番号：氏名 ');
-    selNumDiv.appendChild(label);
-    const selectEl = document.createElement('select');
-    selectEl.id = 'studentSelectorInput';
-    dom.studentSelectorInput = selectEl;
-    selectEl.addEventListener('change', handleStudentSelect);
     const defaultOption = document.createElement('option');
     defaultOption.value = '';
     defaultOption.textContent = '選択';
     defaultOption.selected = true;
     defaultOption.disabled = false;
-    selectEl.appendChild(defaultOption);
+    selNumDiv.appendChild(defaultOption);
     students.forEach(student => {
       const option = document.createElement('option');
       option.value = student[STUDENT_DATA.MAIL_ADDR];
       let strNum = ('0' + student[STUDENT_DATA.NUMBER] + '：').slice(-3);
       option.textContent = strNum + student[STUDENT_DATA.NAME];
-      selectEl.appendChild(option);
+      selNumDiv.appendChild(option);
     });
-    selNumDiv.appendChild(selectEl);
   }
 
   async function handleStudentSelect() {
@@ -287,7 +270,7 @@
       if (isItemChanged && !await confirmAsync("確認", "変更を保存せずに移動してよろしいですか")) {
         return;
       }
-      const selectEl = dom.studentSelectorInput;
+      const selectEl = dom.studentNumberSelection;
       const mailAddr = selectEl.value;
 
       if (mailAddr.length == 0) {
@@ -441,6 +424,10 @@
   }
 
   function setEventListeners() {
+    // イベントリスナー:classSelect
+    dom.classSelection.addEventListener('change', createStudentList);
+    // イベントリスナー:studentSelectorInput
+    dom.studentNumberSelection.addEventListener('change', handleStudentSelect);
     // イベントリスナー:jukentable全体にリスナーを設定
     const inputTableContainer = dom.inputTableContainer;
     inputTableContainer.addEventListener('click', (event) => {
@@ -610,7 +597,6 @@
     }
   }
 
-
   function checkDuplicate(inputId) {
     const input = dom[inputId];
     for (let i = 0; i < examMaxInputCount; i++) {
@@ -630,7 +616,6 @@
     const dcodeSpan = dom[dn];
     const dcode = dcodeSpan.value.trim();
     const dnameSpan = dom[dn.replace('universityCode', 'universityName')];
-
 
     if (dcode.length == 0) {
       dnameSpan.innerHTML = '';
@@ -656,7 +641,6 @@
     select.name = 'examType' + (i + 1);
     select.id = 'examType' + (i + 1);
     dom['examType' + (i + 1)] = select;
-
 
     examTypeOptions.forEach(optionValue => {
       const option = document.createElement('option');
@@ -789,6 +773,18 @@
     debounceTimer = setTimeout(func, delay);
   }
 
+  function setSearchMessage(text) {
+    const idStatusMsg = dom.searchMessage;
+    idStatusMsg.innerHTML = '';
+
+    if (text.length) {
+      const spanSpinner = document.createElement("span");
+      spanSpinner.className = "span-spinner"
+      idStatusMsg.append(spanSpinner)
+      idStatusMsg.append(text)
+    }
+  }
+
   let displayStart = 0;
   const displayStep = 50;
 
@@ -819,10 +815,9 @@
       const total = filteredData.length;
       // ----- 大学データ都度ゲット
       /*
-      setDialogSpinner('検索中．．．')
-      showProgressDialog(true);
+      setSearchMessage('　検索中．．．');
       const objResult = await getFilteredUniversity(keywordInput);
-      showProgressDialog(false);
+      setSearchMessage('');
       const limitedData = objResult.data;
       const total = objResult.total;
       */
@@ -930,7 +925,6 @@
       } else {
         dom['universityName' + (i + 1)].textContent = '';
       }
-
     }
     const strJuken = JSON.stringify(examDataList);
     google.script.run
