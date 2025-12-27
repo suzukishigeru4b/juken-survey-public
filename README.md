@@ -1,6 +1,6 @@
 # 受験校調査アプリ (Preferred School Survey System)
 
-[![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](./VERSION_CHANGES.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 
@@ -35,9 +35,9 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 
 ---
 
-## ✨ v2.0.0 新機能ハイライト
+## ✨ v2.2.0 新機能ハイライト
 
-> **2025年12月リリース** - パフォーマンスとUXをさらに向上！
+> **2025年12月リリース** - 信頼性と堅牢性を強化！
 
 | 改善項目 | 詳細 |
 |:---|:---|
@@ -48,6 +48,7 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 | 💾 **キャッシュ** | 大学データ(Client)と設定・マスタデータ(Server)のキャッシュ |
 | 🔐 **堅牢性** | null安全処理とバリデーション強化 |
 | 🚀 **高速保存** | 保存時のロック時間短縮と処理効率化 (v2.1.0) |
+| 🛡️ **堅牢性** | データ型・比較演算子の厳格化と不整合バグの修正 (v2.2.0) |
 
 詳しくは [VERSION_CHANGES.md](./VERSION_CHANGES.md) をご覧ください。
 
