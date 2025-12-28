@@ -1,32 +1,33 @@
 <style>
   /* =========================================
-     変数定義（前回と同じ設計に完全準拠）
+     1. 変数定義 (Variables)
      ========================================= */
   :root {
-    /* 色（Lightテーマ） */
+    /* --- 色設定 (Light Theme) --- */
     --color-bg: #f5f7fb;
     --color-surface: #ffffff;
     --color-header: #eef7ff;
-    /* aliceblue より少し濃いめで視認性向上 */
     --color-text: #222222;
     --color-muted: #5f6b7a;
     --color-border: #d0d7de;
+    --color-copyright: rgba(0, 0, 0, 0.02);
+
+    /* --- アクセントカラー --- */
     --color-primary: #1068d4;
     --color-primary-contrast: #ffffff;
     --color-danger: #d7263d;
     --color-danger-contrast: #ffffff;
     --color-info: #1070c8;
     --color-spinner: #1082ce;
-    --color-copyright: rgba(0, 0, 0, 0.02);
 
-    /* 角丸・影 */
+    /* --- レイアウト・装飾 --- */
     --radius-xs: 4px;
     --radius-sm: 8px;
     --radius-md: 12px;
     --shadow-1: 0 1px 3px rgba(0, 0, 0, .06);
     --shadow-2: 0 8px 24px rgba(0, 0, 0, .12);
 
-    /* 余白スケール（4の倍数） */
+    /* --- 余白 (4の倍数) --- */
     --space-1: 4px;
     --space-2: 8px;
     --space-3: 12px;
@@ -35,11 +36,12 @@
     --space-6: 24px;
     --space-7: 32px;
 
-    /* フォント */
+    /* --- タイポグラフィ --- */
     --font-base: 16px;
     --line-height: 1.2;
   }
 
+  /* --- ダークモード対応 (Dark Theme) --- */
   @media (prefers-color-scheme: dark) {
     :root {
       --color-light-dark: #2f3b4b;
@@ -51,29 +53,22 @@
       --color-border: #2a3240;
       --shadow-1: none;
       --shadow-2: 0 4px 20px rgba(0, 0, 0, .5);
-
-      textarea,
-      input[type="text"],
-      input[type="number"],
-      input[type="email"],
-      select {
-        background-color: var(--color-light-dark);
-        /* 暗いグレー */
-        color: var(--color-text);
-        /* 白文字 */
-      }
     }
 
+    /* フォーム部品のダークモード対応 */
+    textarea,
+    input[type="text"],
+    input[type="number"],
+    input[type="email"],
+    select,
     button {
       background-color: var(--color-light-dark);
-      /* 暗いグレー */
       color: var(--color-text);
-      /* 白文字 */
     }
   }
 
   /* =========================================
-     基本リセット
+     2. 基本設定 (Base & Reset)
      ========================================= */
   *,
   *::before,
@@ -92,6 +87,12 @@
     color: var(--color-text);
   }
 
+  h1 {
+    font-size: 1.5em;
+    margin: 0;
+  }
+
+  /* --- フォーム部品の基本スタイル --- */
   input,
   button,
   select {
@@ -99,29 +100,29 @@
     font-family: inherit;
     border-radius: var(--radius-xs);
     padding: var(--space-1);
-
   }
 
   input[type="text"] {
     padding: var(--space-1);
   }
 
-  button {
-    padding: 0 var(--space-2);
-  }
-
   input[type="radio"] {
     margin: var(--space-2);
   }
 
-  h1 {
-    font-size: 1.5em;
-    margin: 0;
+  button {
+    padding: 0 var(--space-2);
+  }
+
+  .is-hidden {
+    display: none !important;
   }
 
   /* =========================================
-     共通コンポーネント
+     3. 共通コンポーネント (Components)
      ========================================= */
+
+  /* --- ヘッダー --- */
   .header {
     position: sticky;
     top: 0;
@@ -142,6 +143,7 @@
     line-height: 1.4;
   }
 
+  /* --- フッター --- */
   .footer {
     padding: var(--space-2) 0;
     border-top: 1px solid var(--color-border);
@@ -150,6 +152,14 @@
     text-align: center;
   }
 
+  .copyright {
+    text-align: right;
+    color: var(--color-copyright);
+    margin-bottom: -16px;
+    margin-right: -16px;
+  }
+
+  /* --- ステータス・メッセージ --- */
   .status-message {
     display: flex;
     align-items: center;
@@ -162,9 +172,7 @@
     font-weight: bold;
   }
 
-  /* =========================================
-     スピナー
-     ========================================= */
+  /* --- スピナー (Loading) --- */
   .span-spinner-big {
     display: block;
     padding-bottom: var(--space-3);
@@ -192,14 +200,11 @@
     }
   }
 
-  /* =========================================
-     ダイアログ（モーダル）
-     ========================================= */
+  /* --- ダイアログ (Dialog/Modal) --- */
   dialog[open] {
     margin: 150px auto 0;
     border: none;
     outline: none;
-    border-radius: var(--color-primary);
     border-radius: var(--radius-sm);
     padding: 0;
     min-width: 320px;
@@ -230,14 +235,10 @@
     display: flex;
     flex: 1;
     flex-direction: column;
-    /* 縦並び */
     align-items: center;
-    /* 横方向中央 */
     justify-content: center;
-    /* 縦方向中央 */
     gap: var(--space-3);
     text-align: center;
-    /* テキスト中央揃え */
   }
 
   .confirm-dialog-button-area {
@@ -248,13 +249,11 @@
     margin-bottom: var(--space-3);
   }
 
-  .is-hidden {
-    display: none !important;
-  }
-
   /* =========================================
-     入力画面レイアウト
+     4. レイアウト・ページ設定 (Layouts)
      ========================================= */
+
+  /* --- 入力画面構成 --- */
   .input-background {
     padding: var(--space-4);
     background: var(--color-bg);
@@ -308,13 +307,18 @@
 
   .selected-student {
     text-align: right;
-    /*color: var(--color-primary);*/
     font-weight: bold;
   }
 
-  /* =========================================
-     検索画面
-     ========================================= */
+  .button-area {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-5);
+    padding: var(--space-2);
+    margin: var(--space-3) 0;
+  }
+
+  /* --- 検索画面構成 --- */
   .search-background {
     padding: var(--space-4);
     background: var(--color-bg);
@@ -327,6 +331,12 @@
     padding: var(--space-4);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-1);
+  }
+
+  .search-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
   }
 
   .search-area {
@@ -346,19 +356,7 @@
     flex: 1;
   }
 
-  .search-caution {
-    text-align: center;
-    justify-content: center;
-    gap: var(--space-2);
-    font-size: 0.9rem;
-  }
-
-  .search-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-  }
-
+  .search-caution,
   .search-message {
     text-align: center;
     justify-content: center;
@@ -367,7 +365,7 @@
   }
 
   /* =========================================
-     テーブル共通
+     5. テーブル設定 (Tables)
      ========================================= */
   table {
     width: 100%;
@@ -386,23 +384,8 @@
     text-align: left;
   }
 
-  .td-radio {
-    padding: 0;
-  }
-
-  .radio-label {
-    display: flex;
-    /* ブロック要素にする */
-    height: 100%;
-    /* 高さいっぱい */
-    padding: var(--space-1) var(--space-1);
-    /* もともとtdにあった余白をここに設定 */
-    cursor: pointer;
-    /* カーソルを指の形に */
-    box-sizing: border-box;
-    /* paddingを含めたサイズ計算にする */
-    align-items: center;
-    justify-content: center;
+  tr:nth-child(even) {
+    background: rgba(0, 0, 0, 0.06);
   }
 
   .table-header-row {
@@ -410,8 +393,25 @@
     font-weight: bold;
   }
 
-  tr:nth-child(even) {
-    background: rgba(0, 0, 0, 0.06);
+  /* --- テーブルセル用ユーティリティ --- */
+  .td-radio {
+    padding: 0;
+  }
+
+  .radio-label {
+    display: flex;
+    height: 100%;
+    padding: var(--space-1);
+    cursor: pointer;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .td-flex {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
   }
 
   .text-center {
@@ -422,26 +422,11 @@
     text-align: left;
   }
 
-  .td-flex {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-
   /* =========================================
-     ボタンエリア共通
+     6. レスポンシブ設定 (Responsive)
      ========================================= */
-  .button-area {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--space-5);
-    padding: var(--space-2);
-    margin: var(--space-3) 0;
-  }
 
-  /* =========================================
-     レスポンシブ：900px以下（中～タブレット）
-     ========================================= */
+  /* --- 900px以下: タブレット・中画面 --- */
   @media screen and (min-width: 701px) and (max-width: 900px) {
     .input-table tr {
       display: grid;
@@ -456,6 +441,7 @@
       padding: var(--space-1);
     }
 
+    /* セル配置の調整 */
     .input-table th:nth-child(1),
     .input-table td:nth-child(1),
     .input-table th:nth-child(6),
@@ -495,9 +481,7 @@
     }
   }
 
-  /* =========================================
-     レスポンシブ：700px以下（スマホ）
-     ========================================= */
+  /* --- 700px以下: スマートフォン --- */
   @media screen and (max-width: 700px) {
 
     .input-background,
@@ -505,6 +489,12 @@
       padding: 0;
     }
 
+    .button-area {
+      width: 100%;
+      padding: var(--space-3);
+    }
+
+    /* テーブルをカード型に変換 */
     .table-header-row {
       display: none;
     }
@@ -516,6 +506,7 @@
       border-bottom: 1px solid var(--color-border);
     }
 
+    /* ラベルの表示 */
     .input-table td::before {
       content: attr(data-label);
       font-weight: bold;
@@ -526,18 +517,5 @@
     .input-table tr:last-child td:last-child {
       border-bottom: none;
     }
-
-    .button-area {
-      width: 100%;
-      padding: var(--space-3);
-    }
-  }
-
-  /* 著作権表示 */
-  .copyright {
-    text-align: right;
-    color: var(--color-copyright);
-    margin-bottom: -16px;
-    margin-right: -16px;
   }
 </style>

@@ -1,6 +1,6 @@
 # 受験校調査アプリ (Preferred School Survey System)
 
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](./VERSION_CHANGES.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 
@@ -11,7 +11,7 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 ## 📖 目次
 
 - [概要](#概要)
-- [v2.0.0 新機能ハイライト](#v200-新機能ハイライト)
+- [v2.3.0 新機能ハイライト](#v230-新機能ハイライト)
 - [機能一覧](#機能一覧)
 - [システム要件](#システム要件)
 - [セットアップ手順](#セットアップ手順)
@@ -32,23 +32,21 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 - 🔍 **大学検索機能** - Benesseデータベース対応のインクリメンタルサーチ
 - 📄 **PDF自動発行** - 調査書交付願をワンクリックでメール送信
 - 🔒 **アクセス制御** - 生徒・教員・管理者の権限管理
+- ⚡ **高速化** - サーバー・クライアント両面でのキャッシュ戦略
 
 ---
 
-## ✨ v2.2.0 新機能ハイライト
+## ✨ v2.3.0 新機能ハイライト
 
-> **2025年12月リリース** - 信頼性と堅牢性を強化！
+> **2025年12月リリース** - キャッシュ戦略の最適化とメンテナンス性の向上！
 
 | 改善項目 | 詳細 |
 |:---|:---|
-| 🎨 **モダンUI** | CSS変数によるデザインシステム導入 |
-| 🌙 **ダークモード** | `prefers-color-scheme` 対応 |
-| ⚡ **パフォーマンス** | Sheets API `batchGet` による高速初期化 |
-| 📱 **レスポンシブ** | モバイル向けテーブルのグリッド表示 |
-| 💾 **キャッシュ** | 大学データ(Client)と設定・マスタデータ(Server)のキャッシュ |
-| 🔐 **堅牢性** | null安全処理とバリデーション強化 |
-| 🚀 **高速保存** | 保存時のロック時間短縮と処理効率化 (v2.1.0) |
-| 🛡️ **堅牢性** | データ型・比較演算子の厳格化と不整合バグの修正 (v2.2.0) |
+| 🔄 **自動キャッシュ更新** | シート編集時に自動的にキャッシュを更新する仕組みを導入 |
+| ⚡ **バッチ取得の最適化** | 複数シートのデータ取得時にキャッシュを効率的に活用 |
+| 🛡️ **堅牢性向上** | 削除処理のロジック修正とエラーハンドリング強化 |
+| 📝 **コード整理** | 関数の役割を明確化し、セクション区切りを追加 |
+| 🔧 **メンテナンス機能** | 全キャッシュの手動更新機能を追加 |
 
 詳しくは [VERSION_CHANGES.md](./VERSION_CHANGES.md) をご覧ください。
 
@@ -61,7 +59,7 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 | 機能 | 説明 |
 |:---|:---|
 | 受験校入力 | 志望大学、学部、試験形態、合否結果、進学先を入力・保存 |
-| 大学検索 | コードまたは名称でインクリメンタルサーチ |
+| 大学検索 | コードまたは名称でインクリメンタルサーチ (localStorage キャッシュ) |
 | 調査書交付願 | 入力データに基づきPDFを作成し、メール送信 |
 
 ### 👨‍🏫 教員用機能
@@ -79,6 +77,7 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 | 設定変更 | タイトル、入力許可期間、メール文面の制御 |
 | データエクスポート | 校内DB用データの出力 |
 | Benesseインポート | Benesse形式大学データの一括取り込み |
+| キャッシュ管理 | 自動更新トリガーの設定と手動更新機能 |
 
 ---
 
@@ -93,6 +92,7 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 
 - Google Workspace for Education
 - スプレッドシートの編集権限
+- Apps Script の高度なサービス有効化 (Google Sheets API)
 
 ---
 
@@ -119,8 +119,9 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 
 1. スプレッドシートの **拡張機能** > **Apps Script** を開く
 2. 各ファイル (`main.js`, `index.html`, `css.html`, `script.html`) をコピー
-3. **デプロイ** > **新しいデプロイ** を選択
-4. 以下の設定でデプロイ:
+3. **サービス** から `Google Sheets API` を追加
+4. **デプロイ** > **新しいデプロイ** を選択
+5. 以下の設定でデプロイ:
 
    | 項目 | 設定値 |
    |:---|:---|
@@ -128,9 +129,24 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
    | 次のユーザーとして実行 | `ウェブアプリケーションにアクセスしているユーザー` |
    | アクセスできるユーザー | `ドメイン内の全員` または `全員` |
 
-5. 発行されたURLを共有
+6. 発行されたURLを共有
 
-### 3. Benesseデータのインポート（オプション）
+### 3. トリガーの設定（推奨）
+
+**自動キャッシュ更新のために以下のトリガーを設定してください:**
+
+1. Apps Script エディタで **トリガー** アイコンをクリック
+2. 以下のトリガーを追加:
+
+   | 関数名 | イベントタイプ | イベントソース |
+   |:---|:---|:---|
+   | `onEdit` | 編集時 | スプレッドシートから |
+   | `onChange` | 変更時 | スプレッドシートから |
+
+> [!TIP]
+> これらのトリガーにより、設定や選択肢マスタの変更が自動的にキャッシュに反映されます。
+
+### 4. Benesseデータのインポート（オプション）
 
 > [!IMPORTANT]
 > Benesseの大学データCSVファイルは **ShiftJIS** でエンコードされています。インポート前に **UTF-8** に変換してください。
@@ -165,10 +181,40 @@ juken-survey/
 
 | ドキュメント | 対象 | 内容 |
 |:---|:---|:---|
-| [PROGRAM_SPECIFICATION.md](./PROGRAM_SPECIFICATION.md) | 開発者 | システム設計・API仕様 |
+| [PROGRAM_SPECIFICATION.md](./PROGRAM_SPECIFICATION.md) | 開発者 | システム設計・API仕様・キャッシュ戦略 |
 | [TEACHER_MANUAL.md](./TEACHER_MANUAL.md) | 教員・管理者 | 操作手順・管理機能の使い方 |
 | [STUDENT_MANUAL.md](./STUDENT_MANUAL.md) | 生徒 | 受験校入力・調査書発行の手順 |
-| [VERSION_CHANGES.md](./VERSION_CHANGES.md) | 全員 | v2.0.0の変更点一覧 |
+| [VERSION_CHANGES.md](./VERSION_CHANGES.md) | 全員 | v2.3.0の変更点一覧 |
+
+---
+
+## パフォーマンス最適化
+
+### キャッシュ戦略
+
+| データ種別 | キャッシュ場所 | 有効期限 | 特徴 |
+|:---|:---|:---|:---|
+| 設定・選択肢 | CacheService | 6時間 | 自動更新 (トリガー) |
+| 学籍・職員 | CacheService | 6時間 | 自動更新 (トリガー) |
+| 大学データ | localStorage | 24時間 | クライアント側 |
+
+### API呼び出し最適化
+
+- **初期データ取得**: `batchGet` による複数シート一括取得
+- **受験データ保存**: `batchUpdate` + `append` による効率的な書き込み
+- **キャッシュヒット率**: トリガーによる自動更新で常に最新状態を維持
+
+---
+
+## トラブルシューティング
+
+### キャッシュ関連
+
+| 問題 | 対処法 |
+|:---|:---|
+| 設定変更が反映されない | トリガーが正しく設定されているか確認 |
+| 大学検索が遅い | ブラウザの localStorage をクリア |
+| データが古い | `warmUpAllCache()` を手動実行 |
 
 ---
 
@@ -194,6 +240,8 @@ copies or substantial portions of the Software.
 
 <div align="center">
 
-**Made for Education**
+**Made for Education with ❤️**
+
+*v2.3.0 - Enhanced Cache Strategy & Reliability*
 
 </div>

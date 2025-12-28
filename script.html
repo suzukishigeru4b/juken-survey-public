@@ -124,6 +124,7 @@
     setElementHidden(dom.inputSection, true)
     //setInputVisibility("hidden");
     showProgressDialog(true);
+    getUniversityDataList();
     google.script.run
       .withSuccessHandler(onInitialDataReceived)
       .withFailureHandler(error => {
@@ -140,7 +141,7 @@
     STUDENT_DATA = allData.studentStructure || {};
     EXAM_DATA = allData.examStructure || {};
     userRole = allData.userRole || "",
-      examMaxInputCount = allData.examMaxCount || 0;
+    examMaxInputCount = allData.examMaxCount || 0;
     examTypeOptions = allData.examTypeOptions || [];
     resultOptions = allData.resultOptions || [];
     teacherData = padRowsWithHeader(allData.teacherData || [])[0] || [];
@@ -158,7 +159,7 @@
       disableReportButton(true);
       setElementHidden(dom.selectorSection, true);
       setElementHidden(dom.inputSection, true);
-      setDialogSpinner("生徒一覧取得中・・・");
+      setDialogSpinner("【教員モード】生徒一覧取得中・・・");
       setDialogBackdrop(dom.progressDialog, false);
       // 生徒一覧を非同期で取得
       google.script.run
@@ -176,7 +177,7 @@
         })
         .getStudentsList();
 
-      getUniversityDataList();
+      //getUniversityDataList();
     } else if (allData.userRole === 'student') {
       setDialogBackdrop(dom.progressDialog, false);
       setDialogSpinner("受験校データ取得中...");
@@ -209,7 +210,7 @@
         })
         .getExamDataList();
 
-      getUniversityDataList();
+      //getUniversityDataList();
     } else {
 
       showProgressDialog(false);
