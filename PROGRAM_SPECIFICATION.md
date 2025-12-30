@@ -99,7 +99,7 @@ juken-survey/
 | **職員データ** | `TEACHERS` | 教員マスタ |
 | **受験校DB** | `JUKEN_DB` | トランザクションデータ |
 | **大学データ** | `DAIGAKU` | 大学コードマスタ |
-| **試験形態** | `SEL_KEITAI` | 選択肢マスタ |
+| **試験形態** | `KEITAI` | 選択肢マスタ |
 | **合否選択肢** | `SEL_GOUHI` | 選択肢マスタ |
 | **受験形態選択肢** | `SEL_KEITAI` | 選択肢マスタ |
 | **設定** | `SETTINGS` | システム設定 |
@@ -232,13 +232,13 @@ sequenceDiagram
 #### キャッシュ対象シート
 
 ```javascript
-const CACHE_TARGET_SHEETS = {
-  [SHEET_NAMES.SETTINGS]: 2,      // 設定シート
-  [SHEET_NAMES.SEL_GOUHI]: 2,     // 合否選択肢
-  [SHEET_NAMES.SEL_KEITAI]: 2,    // 受験形態選択肢
-  [SHEET_NAMES.TEACHERS]: 1,      // 職員データ
-  [SHEET_NAMES.STUDENTS]: 1       // 学籍データ
-};
+const CACHE_TARGET_SHEETS = [
+  SHEET_NAMES.SETTINGS,
+  SHEET_NAMES.SEL_GOUHI,
+  SHEET_NAMES.SEL_KEITAI,
+  SHEET_NAMES.TEACHERS,
+  SHEET_NAMES.STUDENTS
+];
 ```
 
 #### キャッシュ更新トリガー
@@ -256,11 +256,12 @@ const CACHE_TARGET_SHEETS = {
 
 | 関数名 | 説明 |
 |:---|:---|
-| `getSheetDataApiWithCache(sheetName, startRow)` | キャッシュ付きシートデータ取得 |
+| `getSheetDataApiWithCache(sheetName)` | キャッシュ付きシートデータ取得 |
 | `getBatchSheetDataWithCache(requests)` | 複数シートの一括取得（キャッシュ対応） |
-| `warmUpCache(sheetName, startRow)` | 指定シートのキャッシュ強制更新 |
+| `warmUpCache(sheetName)` | 指定シートのキャッシュ強制更新 |
 | `warmUpAllCache()` | 全対象シートのキャッシュ更新 |
 | `checkAndUpdateCache(sheetName)` | トリガー経由でのキャッシュ更新判定 |
+| `setupTriggers()` | キャッシュ更新トリガーの一括設定 |
 
 ---
 
@@ -356,6 +357,8 @@ sequenceDiagram
 | `importUniversityData()` | Benesseデータをインポート |
 | `clearUniversityData()` | 大学データシートをクリア |
 | `getUniversityDataApi()` | 大学コードマスタを取得（キャッシュなし） |
+| `warmUpAllCache()` | 全キャッシュを手動更新（メニューから実行可） |
+| `setupTriggers()` | キャッシュ更新トリガーを自動設定（メニューから実行可） |
 
 ---
 

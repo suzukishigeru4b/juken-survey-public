@@ -17,8 +17,8 @@
   let currentStudentData = [];
   let examDataList = [];
   let dom = {}; // DOMキャッシュ用
-
   let universityCodeList = [];
+  let universityCodeSerial = "0";
   let isItemChanged = false;
   let isDeleted = false;
   let isUniversityCodeLoading = false;
@@ -124,7 +124,6 @@
     setElementHidden(dom.inputSection, true)
     //setInputVisibility("hidden");
     showProgressDialog(true);
-    getUniversityDataList();
     google.script.run
       .withSuccessHandler(onInitialDataReceived)
       .withFailureHandler(error => {
@@ -147,6 +146,8 @@
     teacherData = padRowsWithHeader(allData.teacherData || [])[0] || [];
     currentStudentData = padRowsWithHeader(allData.studentData || [])[0] || [];
     examDataList = padRowsWithHeader(allData.examData || []);
+    universityCodeSerial = allData.universityCodeSerial || "0";
+    getUniversityDataList();
     setEventListeners();
     disableSendButton(true);
 
@@ -344,57 +345,89 @@
   //--------------------------------------------------------------------------------
   const universityMap = new Map;
 
-  function getUniversityDataList() {
+  async function getUniversityDataList() {
     const CACHE_KEY = 'universityDataCache';
     const CACHE_TIMESTAMP_KEY = 'universityDataTimestamp';
+    const CACHE_KEY_SERIAL = 'universityCodeSerial';
     const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24時間
-
-    // キャッシュの確認
-    try {
+    // clearUniversityDataCache(); // デバッグ用（直接取得を強制）
+    try { // キャッシュの確認
       const cachedData = localStorage.getItem(CACHE_KEY);
       const cachedTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
-
-      if (cachedData && cachedTimestamp) {
+      const cachedSerial = localStorage.getItem(CACHE_KEY_SERIAL);
+      console.log(cachedSerial, universityCodeSerial)
+      if (cachedData && cachedTimestamp && cachedSerial) {
         const age = Date.now() - parseInt(cachedTimestamp);
-        if (age < CACHE_DURATION) {
-          //console.log('大学データをキャッシュから取得しました');
-          // キャッシュから取得する場合も、ローディング状態を設定
+        if (String(cachedSerial) === String(universityCodeSerial) && age < CACHE_DURATION) {
           isUniversityCodeLoading = true;
           disableSearchButton(true);
-          setStatusMessage('大学コード取得中．．．');
-          onUniversityDataReceived(cachedData);
+          setStatusMessage('大学データ読込中（キャッシュ）');
+          onUniversityDataReceived(cachedData); // キャッシュから直接 JSON パース
           return;
-        } else {
-          console.warn('キャッシュの有効期限が切れています');
         }
       }
     } catch (e) {
-      console.warn('localStorageへのアクセスに失敗しました:', e);
-      // キャッシュが使えない場合は通常通りサーバーから取得
+      console.warn('localStorageへのアクセスに失敗:', e);
     }
-
-    // キャッシュがない、または期限切れの場合はサーバーから取得
-    isUniversityCodeLoading = true;
+    isUniversityCodeLoading = true; // キャッシュがない場合はサーバーから取得
     disableSearchButton(true);
-    setStatusMessage('大学コード取得中．．．')
-    google.script.run
-      .withSuccessHandler(str => {
-        // キャッシュに保存
-        try {
-          localStorage.setItem(CACHE_KEY, str);
-          localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
-          //console.log('大学データをキャッシュに保存しました');
-        } catch (e) {
-          console.warn('localStorageへの保存に失敗しました:', e);
-        }
-        onUniversityDataReceived(str);
-      })
-      .withFailureHandler(error => {
-        console.error(error);
-        showProgressDialog(false); // くるくるを消す
-        confirmAsync("エラー", "処理に失敗しました。<br>時間をおいて再度試すか、先生に連絡してください。<br>詳細: " + error.message);
-      })
-      .getUniversityDataList();
+    setStatusMessage('大学データ取得中（約600KB）...');
+    try {
+      const responseStr = await new Promise((resolve, reject) => { // サーバーからデータを取得（Promise化）
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .getUniversityDataList();
+      });
+      const response = JSON.parse(responseStr); // サーバーからのレスポンスをパース
+      console.log(`圧縮前: ${response.originalSize}B, 圧縮後: ${response.compressedSize}B`);
+      const compressedData = base64ToUint8Array(response.compressed); // Base64デコードしてUint8Arrayに変換
+      const decompressed = await decompressGzip(compressedData); // gzip解凍（ブラウザ標準API使用）
+      try { // 解凍したJSONをキャッシュに保存
+        localStorage.setItem(CACHE_KEY, decompressed);
+        localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
+        localStorage.setItem(CACHE_KEY_SERIAL, universityCodeSerial);
+        //console.log(`大学データをキャッシュに保存: ${decompressed.length}文字`);
+      } catch (e) {
+        console.warn('localStorageへの保存に失敗:', e);
+      }
+      onUniversityDataReceived(decompressed);
+    } catch (e) {
+      console.error('大学データの取得・解凍に失敗:', e);
+      try { // 解凍失敗時はキャッシュをクリア
+        localStorage.removeItem(CACHE_KEY);
+        localStorage.removeItem(CACHE_TIMESTAMP_KEY);
+        localStorage.removeItem(CACHE_KEY_SERIAL);
+      } catch (storageError) {
+        console.warn('キャッシュクリアに失敗:', storageError);
+      }
+      showProgressDialog(false);
+      await confirmAsync("エラー", "大学データの読み込みに失敗しました。<br>ページを再読み込みしてください。<br>詳細: " + e.message);
+    }
+  }
+
+  function base64ToUint8Array(base64) {
+    // Base64デコード
+    const binaryString = atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  async function decompressGzip(compressedData) {
+    if (!window.DecompressionStream) { // DecompressionStreamの対応確認
+      throw new Error('このブラウザはDecompressionStreamに対応していません。Chrome 80+を使用してください。');
+    }
+    const blob = new Blob([compressedData]); // Blobを作成
+    const decompressedStream = blob.stream().pipeThrough( // DecompressionStreamで解凍
+      new DecompressionStream('gzip')
+    );
+    const response = new Response(decompressedStream); // Responseオブジェクトとして読み取り
+    const decompressedText = await response.text();
+    return decompressedText;
   }
 
   function onUniversityDataReceived(str) {
