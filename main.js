@@ -1,6 +1,6 @@
 /**
  * 受験校調査システム (Preferred school survey system)
- * Version 2.3.0
+ * Version 2.4.0
  * * Copyright (c) 2025 Shigeru Suzuki
  * * Released under the MIT License.
  * https://opensource.org/licenses/MIT
@@ -307,28 +307,12 @@ function getUniversityDataList() {
     // Base64エンコード
     const base64 = Utilities.base64Encode(compressedBytes);
 
-    return JSON.stringify({
-      compressed: base64,
-      universityCodeSerial: settings.daigakuSerial,
-      originalSize: jsonString.length,
-      compressedSize: compressedBytes.length
-    });
+    return JSON.stringify(base64);
   } catch (e) {
     console.error('getUniversityDataListでエラー: ' + e);
     throw new Error('作成者に連絡してください。');
   }
 }
-/*
-function getUniversityDataList() {
-  try {
-    // キャッシュ確認
-    return JSON.stringify(getUniversityDataApi());
-  } catch (e) {
-    console.error('getUniversityDataListでエラー: ' + e);
-    throw new Error('作成者に連絡してください。');
-  }
-}
-*/
 /*
 function getFilteredUniversityDataList(searchWord, start, limit) {
   const data = getUniversityDataApi() || [];
@@ -350,14 +334,12 @@ function getFilteredUniversityDataList(searchWord, start, limit) {
 //--------------------------------------------------------------------------------
 // 3-3. 受験データ操作 (取得・保存)
 //--------------------------------------------------------------------------------
-//
 // 受験データのみの送信 (更新後など) - API使用
-//
 function getExamDataList(mailAddr = Session.getActiveUser().getEmail()) {
   try {
     const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
     const spreadsheetId = activeSpreadsheet.getId();
-    // 受験データ全体を取得 (A1からZ列まで)
+    // 受験データ全体を取得 (A1からH列まで)
     const rangeName = `'${SHEET_NAMES.JUKEN_DB}'!A1:H`;
     const response = Sheets.Spreadsheets.Values.get(spreadsheetId, rangeName);
     const allExamData = response.values || [];
@@ -380,7 +362,7 @@ function getExamDataList(mailAddr = Session.getActiveUser().getEmail()) {
 //
 // 受験データの保存 (バリデーション付き・最適化版)
 //
-function saveExamDataList(strJuken, mailAddr = Session.getActiveUser().getEmail()) {
+function sendExamData(strJuken, mailAddr = Session.getActiveUser().getEmail()) {
   if (!isValidUser(mailAddr)) { // バリデーション
     throw new Error("保存権限がありません。不正なアクセスの可能性があります。");
   }
@@ -542,7 +524,7 @@ function saveExamDataList(strJuken, mailAddr = Session.getActiveUser().getEmail(
     // ===== STEP 5: 最新データを返却 =====
     return getExamDataList(mailAddr);
   } catch (e) {
-    console.error('saveExamDataListでエラー: ' + e);
+    console.error('sendExamDataでエラー: ' + e);
     if (e.message && e.message.includes('他のユーザーが編集中')) {
       throw e;
     } else if (e.message && e.message.includes('保存権限')) {
