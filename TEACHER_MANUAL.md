@@ -1,6 +1,6 @@
 # 教員・管理者用マニュアル
 
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](./VERSION_CHANGES.md)
 [![For](https://img.shields.io/badge/対象-教員・管理者-orange.svg)](#)
 
 > 本マニュアルは、受験校調査アプリの管理・運用を行う教員向けの説明書です。
@@ -226,3 +226,4 @@ flowchart LR
 [README](./README.md) ｜ [生徒用マニュアル](./STUDENT_MANUAL.md) ｜ [プログラム仕様書](./PROGRAM_SPECIFICATION.md)
 
 </div>
+
