@@ -140,9 +140,9 @@
     examMaxInputCount = allData.examMaxCount || 0;
     examTypeOptions = allData.examTypeOptions || [];
     resultOptions = allData.resultOptions || [];
-    teacherData = padRowsWithHeader(allData.teacherData || [])[0] || [];
-    currentStudentData = padRowsWithHeader(allData.studentData || [])[0] || [];
-    examDataList = padRowsWithHeader(allData.examData || []);
+    teacherData = allData.teacherData || [];
+    currentStudentData = allData.studentData || [];
+    examDataList = allData.examData || [];
     universityCodeSerial = allData.universityCodeSerial || "0";
     getUniversityDataList();
     setEventListeners();
@@ -159,7 +159,7 @@
         .withSuccessHandler(studentsJSON => {
           showProgressDialog(false);
           setDialogBackdrop(dom.progressDialog, true);
-          allStudentsData = padRowsWithHeader(JSON.parse(studentsJSON) || []);
+          allStudentsData = JSON.parse(studentsJSON) || [];
           showSelector();
         })
         .withFailureHandler(error => {
@@ -187,7 +187,7 @@
         .withSuccessHandler(examJSON => {
           showProgressDialog(false);
           setDialogBackdrop(dom.progressDialog, true);
-          examDataList = padRowsWithHeader(JSON.parse(examJSON) || []);
+          examDataList = JSON.parse(examJSON) || [];
           setInputTable(); // データを反映
         })
         .withFailureHandler(error => {
@@ -329,10 +329,12 @@
       if (cachedData && cachedTimestamp && cachedSerial) {
         const age = Date.now() - parseInt(cachedTimestamp);
         if (String(cachedSerial) === String(universityCodeSerial) && age < CACHE_DURATION) {
+          const compressedData = await base64ToUint8ArrayAsync(cachedData); // Base64デコードしてUint8Arrayに変換
+          const decompressed = await decompressGzipAsync(compressedData); // gzip解凍（ブラウザ標準API使用）
           isUniversityCodeLoading = true;
           disableSearchButton(true);
           setStatusMessage('大学データ読込中（キャッシュ）');
-          onUniversityDataReceived(cachedData); // キャッシュから直接 JSON パース
+          onUniversityDataReceived(decompressed); // キャッシュから直接 JSON パース
           return;
         }
       }
@@ -350,17 +352,16 @@
           .getUniversityDataList();
       });
       const response = JSON.parse(responseStr); // サーバーからのレスポンスをパース
-      //console.log(`圧縮前: ${response.originalSize}B, 圧縮後: ${response.compressedSize}B`);
-      const compressedData = await base64ToUint8ArrayAsync(response); // Base64デコードしてUint8Arrayに変換
-      const decompressed = await decompressGzipAsync(compressedData); // gzip解凍（ブラウザ標準API使用）
       try { // 解凍したJSONをキャッシュに保存
-        localStorage.setItem(CACHE_KEY, decompressed);
+        localStorage.setItem(CACHE_KEY, response);
         localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
         localStorage.setItem(CACHE_KEY_SERIAL, universityCodeSerial);
         //console.log(`大学データをキャッシュに保存: ${decompressed.length}文字`);
       } catch (e) {
         console.warn('localStorageへの保存に失敗:', e);
       }
+      const compressedData = await base64ToUint8ArrayAsync(response); // Base64デコードしてUint8Arrayに変換
+      const decompressed = await decompressGzipAsync(compressedData); // gzip解凍（ブラウザ標準API使用）
       onUniversityDataReceived(decompressed);
     } catch (e) {
       console.error('大学データの取得・解凍に失敗:', e);
@@ -554,10 +555,10 @@
       dom['deleteButton' + (i + 1)] = clearBtn;
 
       if (hasData) {
-        dcode.value = jukenItem[EXAM_DATA.DAIGAKU_CODE];
-        dname.textContent = jukenItem[EXAM_DATA.DAIGAKU_NAME];
-        keitaiCell.appendChild(createExamTypeSelect(i, jukenItem[EXAM_DATA.KEITAI]));
-        gouhiCell.appendChild(createResultSelect(i, jukenItem[EXAM_DATA.GOUHI]));
+        dcode.value = jukenItem[EXAM_DATA.DAIGAKU_CODE] || '';
+        dname.textContent = jukenItem[EXAM_DATA.DAIGAKU_NAME] || '';
+        keitaiCell.appendChild(createExamTypeSelect(i, jukenItem[EXAM_DATA.KEITAI] || ''));
+        gouhiCell.appendChild(createResultSelect(i, jukenItem[EXAM_DATA.GOUHI] || ''));
         // サーバサイドから渡されたbool値は文字列
         if (isTrue(jukenItem[EXAM_DATA.SHINGAKU]) === true) {
           shingakuRadio.checked = true;
@@ -1013,7 +1014,7 @@
 
     // サーバーから返された最新データで更新
     if (strJSON) {
-      examDataList = padRowsWithHeader(JSON.parse(strJSON));
+      examDataList = JSON.parse(strJSON);
       setInputTable();
     }
   }
@@ -1035,7 +1036,7 @@
 
   function onExamDataReceived(strJSON) {
     isDeleted = false;
-    examDataList = padRowsWithHeader(JSON.parse(strJSON));
+    examDataList = JSON.parse(strJSON);
     showProgressDialog(false);
     disableReportButton(false);
     //setElementHidden("selectorSection", true);
@@ -1072,26 +1073,5 @@
   //--------------------------------------------------------------------------------
   window.onload = pageLoaded;
 
-  //--------------------------------------------------------------------------------
-  // データ補正ヘルパー (APIの行末欠損対策：ヘッダー基準)
-  //--------------------------------------------------------------------------------
-  function padRowsWithHeader(rows) {
-    if (!Array.isArray(rows) || rows.length === 0) return [];
 
-    // 1行目をヘッダーとして扱い、その長さを基準にする
-    const header = rows[0];
-    const headerLength = header.length;
-
-    // 2行目以降のデータ部分を取得
-    const dataRows = rows.slice(1);
-
-    // データ部分に対してパディングを適用
-    return dataRows.map(row => {
-      if (!Array.isArray(row)) return row;
-      while (row.length < headerLength) {
-        row.push("");
-      }
-      return row;
-    });
-  }
 </script>

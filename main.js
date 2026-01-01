@@ -1,6 +1,6 @@
 /**
  * 受験校調査システム (Preferred school survey system)
- * Version 2.4.0
+ * Version 2.3.0
  * * Copyright (c) 2025 Shigeru Suzuki
  * * Released under the MIT License.
  * https://opensource.org/licenses/MIT
@@ -229,7 +229,7 @@ function getInitialData() {
         resultOptions: resultOptions,
         teacherData: [],
         studentsData: [],
-        studentData: [allStudentsData[0], studentData], // ヘッダーとデータをセットで送信
+        studentData: studentData, // データを送信（1次元配列）
         examData: [], // 空配列：後で取得
         universityCodeSerial: settings.daigakuSerial
       }
@@ -245,7 +245,7 @@ function getInitialData() {
         examMaxCount: settings.inputMax,
         examTypeOptions: examTypeOptions,
         resultOptions: resultOptions,
-        teacherData: [arrAllTeachers[0], arrTeacher], // ヘッダーとデータをセットで送信
+        teacherData: arrTeacher, // データを送信（1次元配列）
         studentsData: [], // 空配列：後で取得
         studentData: [],
         examData: [],
@@ -286,7 +286,7 @@ function getStudentsList() {
   try {
     // キャッシュ確認
     const allStudentsData = getSheetDataApiWithCache(SHEET_NAMES.STUDENTS) || [];
-    return JSON.stringify(allStudentsData);
+    return JSON.stringify(allStudentsData.slice(1)); // ヘッダーを除去して返却
   } catch (e) {
     console.error('getStudentsListでエラー: ' + e);
     throw new Error('作成者に連絡してください。');
@@ -346,11 +346,6 @@ function getExamDataList(mailAddr = Session.getActiveUser().getEmail()) {
 
     // フィルタリング
     const examData = allExamData.filter(row => row[EXAM_DATA.MAIL_ADDR] === mailAddr && isTrue(row[EXAM_DATA.DEL_FLAG]) !== true);
-    // クライアント側の padRowsWithHeader で1行目がヘッダーとして扱われ削除されるため、
-    // ここでヘッダー行を先頭に追加する
-    if (allExamData.length > 0) {
-      examData.unshift(allExamData[0]);
-    }
     // 注意：DEL_FLAGとSHINGAKUは文字列のままフロントエンドに渡される
     return JSON.stringify(examData);
   } catch (e) {
