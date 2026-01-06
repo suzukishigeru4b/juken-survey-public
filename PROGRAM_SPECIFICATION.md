@@ -349,9 +349,14 @@ function pageLoaded() {
 
 頻繁にアクセスするDOM要素をキャッシュ。
 
+**v2.3.1での改良点:**
+- `dom` オブジェクトを `config` から独立させ、グローバル変数として配置
+- すべての `config.dom` 参照を `dom` に更新
+
 | グローバル変数 | 型 | 用途 |
 |:---|:---|:---|
 | `dom` | `Object` | DOM要素の参照を格納 |
+| `config` | `Object` | アプリケーション設定値を格納 |
 
 ---
 
@@ -382,9 +387,14 @@ function pageLoaded() {
 |:---|:---|
 | 保存先 | `localStorage` |
 | キー | `universityDataCache`, `universityDataTimestamp`, `universityCodeSerial` |
-| 有効期限 | 24時間 |
+| 有効期限 | 24時間 (`24 * 60 * 60 * 1000` ms) |
 | 圧縮形式 | gzip（サーバー側） |
 | データ形式 | Base64エンコード |
+
+**v2.3.1での改良点:**
+- `base64ToUint8ArrayAsync` 関数のエラーを修正
+- fetch() APIのData URIスキームからatob()方式に変更
+- 長いBase64文字列のデコード安定性向上
 
 ---
 
@@ -393,6 +403,11 @@ function pageLoaded() {
 #### `sendExamDataWithRetry()`
 
 フォームの入力値をサーバーに送信（リトライ機能付き）。
+
+**v2.3.1での改良点:**
+- 関数のモジュール化により可読性向上
+- 確認、UI初期化、データ収集、エラー処理を分割
+- `base64ToUint8ArrayAsync` のエラーを修正（fetch() API → atob()方式）
 
 ```mermaid
 flowchart TD
