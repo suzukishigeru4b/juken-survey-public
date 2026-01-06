@@ -1,6 +1,6 @@
 # プログラム仕様書
 
-[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.3.1-blue.svg)](./VERSION_CHANGES.md)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 [![For](https://img.shields.io/badge/対象-開発者-red.svg)](#)
 
@@ -173,17 +173,19 @@ Webアプリへのアクセス時に呼び出されるエントリポイント�
 
 ```javascript
 function doGet(e) {
-  const template = HtmlService.createTemplateFromFile('index');
-  return template.evaluate()
-    .setTitle(getPageTitle())
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.SAMEORIGIN);
+  const settings = getSettings();
+  const htmlTemplate = HtmlService.createTemplateFromFile('index');
+  const html = htmlTemplate.evaluate();
+  html.setTitle(settings.pageTitle);
+  return html;
 }
 ```
 
 | 項目 | 内容 |
 |:---|:---|
 | **戻り値** | `HtmlOutput` |
-| **セキュリティ** | X-Frame-Options: SAMEORIGIN |
+| **タイトル設定** | 設定シートから動的に取得 |
+| **セキュリティ** | デフォルト設定 |
 
 ---
 
@@ -195,11 +197,18 @@ function doGet(e) {
 sequenceDiagram
     participant C as Client
     participant S as Server
+    participant Cache as Cache
     participant SS as Spreadsheet
     
     C->>S: getInitialData()
-    S->>SS: batchGet (複数シート)
-    SS-->>S: データ返却
+    S->>Cache: batchGet (キャッシュ確認)
+    alt Cache Hit
+        Cache-->>S: キャッシュデータ返却
+    else Cache Miss
+        S->>SS: batchGet (複数シート)
+        SS-->>S: データ返却
+        S->>Cache: キャッシュ保存
+    end
     S->>S: ユーザー判定
     S-->>C: JSON Response
 ```
@@ -209,12 +218,13 @@ sequenceDiagram
 | **戻り値** | `Object` (ユーザーロールに応じたJSON) |
 | **取得内容** | 選択肢マスタ, ユーザー情報, 設定値 |
 | **ユーザーロール** | `student` / `teacher` / `guest` |
+| **キャッシュ対応** | 設定・マスタデータはキャッシュ利用 |
 
 ---
 
 ### 4.2 データ操作
 
-#### `saveExamDataList(strJuken, mailAddr)`
+#### `sendExamData(strJuken, mailAddr)`
 
 受験データを保存する。
 
@@ -239,10 +249,11 @@ flowchart TD
 
 | 機能 | 説明 |
 |:---|:---|
-| **排他制御** | `LockService` で同時書き込みを防止 (待機時間等の最適化) |
-| **バリデーション** | 入力件数、選択肢の正当性チェック (設定・マスタはキャッシュ利用) |
+| **排他制御** | `LockService` で同時書き込みを防止 |
+| **バリデーション** | 入力件数、選択肢の正当性チェック |
 | **更新方式** | 差分更新（変更行のみ） |
 | **削除方式** | 論理削除（削除フラグ） |
+| **リトライ機能** | クライアント側でExponential Backoff対応 |
 
 ---
 
@@ -292,112 +303,16 @@ sequenceDiagram
 | 関数名 | 説明 |
 |:---|:---|
 | `createData()` | 校内DB用データを生成 |
-| `importUniversityData()` | Benesseデータをインポート（シリアル番号も更新） |
-| `getUniversityDataApi()` | 大学コードマスタを取得（キャッシュ対応） |
-| `getSheetDataApiWithCache(sheetName)` | シートデータを取得してキャッシュ (設定・選択肢用) |
-
----
-
-### 4.5 キャッシュ管理
-
-#### `warmUpCache(sheetName)`
-
-指定シートのキャッシュを強制更新する。
-
-| パラメータ | 型 | 説明 |
-|:---|:---|:---|
-| `sheetName` | `String` | 対象のシート名 |
-
-#### `warmUpAllCache()`
-
-全対象シートのキャッシュを一括更新する。
-
-| 対象シート |
-|:---|
-| SETTINGS（設定） |
-| TEACHERS（職員データ） |
-| STUDENTS（学籍データ） |
-| SEL_GOUHI（合否選択肢） |
-| SEL_KEITAI（受験形態選択肢） |
-
----
-
-### 4.6 トリガー管理
-
-#### `setupTriggers()`
-
-キャッシュ更新・メンテナンス用のトリガーを一括設定。
-
-```mermaid
-flowchart LR
-    A[setupTriggers実行] --> B[既存トリガー削除]
-    B --> C[onEditトリガー設定]
-    C --> D[onChangeトリガー設定]
-    D --> E[warmUpAllCache\n3時間ごと]
-    E --> F[deleteMarkedRows\n3時間ごと]
-```
-
-| 設定されるトリガー | 種別 | 実行タイミング |
-|:---|:---|:---|
-| `onEdit` | スプレッドシート | 編集時 |
-| `onChange` | スプレッドシート | 変更時 |
-| `warmUpAllCache` | 時間ベース | 3時間ごと |
-| `deleteMarkedRows` | 時間ベース | 3時間ごと |
-
-#### `checkAndUpdateCache(sheetName)`
-
-onEdit/onChangeから呼び出され、対象シートの場合のみキャッシュを更新する。
-
----
-
-### 4.7 データ圧縮
-
-#### `getUniversityDataList()`
-
-大学データをgzip圧縮してクライアントに返す。
-
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant S as Server
-    participant SS as Spreadsheet
-    
-    C->>S: getUniversityDataList()
-    S->>SS: 大学データ取得
-    SS-->>S: データ返却
-    S->>S: JSON.stringify
-    S->>S: gzip圧縮
-    S->>S: Base64エンコード
-    S-->>C: 圧縮データ
-    C->>C: Base64デコード
-    C->>C: gzip解凍
-    C->>C: JSON.parse
-```
-
-| 処理ステップ | サーバー側 | クライアント側 |
-|:---|:---|:---|
-| 1. シリアライズ | `JSON.stringify()` | - |
-| 2. 圧縮 | `Utilities.gzip()` | - |
-| 3. エンコード | `Utilities.base64Encode()` | - |
-| 4. 転送 | → | ← |
-| 5. デコード | - | `fetch(data:...)` |
-| 6. 解凍 | - | `DecompressionStream` |
-| 7. パース | - | `JSON.parse()` |
-
----
-
-### 4.8 メンテナンス
-
-#### `deleteMarkedRows()`
-
-論理削除フラグが付いたレコードを物理削除する。
-
-| 項目 | 内容 |
-|:---|:---|
-| **実行タイミング** | 手動（メニュー）または3時間ごとの自動実行 |
-| **排他制御** | `LockService.getDocumentLock()` で排他 |
-| **タイムアウト** | 120秒 |
-| **処理方式** | 全データ取得→フィルタリング→再書き込み |
+| `importUniversityData()` | Benesseデータをインポート |
+| `getUniversityDataList()` | 大学コードマスタを取得（gzip圧縮対応） |
+| `getSheetDataApiWithCache(sheetName)` | シートデータを取得してキャッシュ |
+| `getBatchSheetDataWithCache(requests)` | 複数シートを一括取得（キャッシュ対応）|
+| `warmUpCache(sheetName)` | 指定シートのキャッシュを更新 |
+| `warmUpAllCache()` | 全キャッシュを一括更新 |
+| `setupTriggers()` | キャッシュ更新トリガーを設定 |
+| `queryDeleteMarkedRows()` | 論理削除済みデータを完全削除 |
+| `clearUniversityData()` | 大学データをクリア |
+| `incrementUniversitySerial()` | 大学データ変更時にシリアル番号を自動インクリメント |
 
 ---
 
@@ -412,20 +327,21 @@ sequenceDiagram
 ページ読み込み時の初期化処理。
 
 ```javascript
-async function pageLoaded() {
+function pageLoaded() {
   cacheDomElements();
-  showLoading();
-  try {
-    const data = await new Promise((resolve, reject) => {
-      google.script.run
-        .withSuccessHandler(resolve)
-        .withFailureHandler(reject)
-        .getInitialData();
-    });
-    initializeUI(data);
-  } finally {
-    hideLoading();
-  }
+  window.onbeforeunload = null;
+  setDialogSpinner(" 初期データ取得中・・・");
+  setElementHidden(dom.selectorSection, true)
+  setElementHidden(dom.inputSection, true)
+  showProgressDialog(true);
+  google.script.run
+    .withSuccessHandler(onInitialDataReceived)
+    .withFailureHandler(error => {
+      console.error(error);
+      showProgressDialog(false);
+      confirmAsync("エラー", "処理に失敗しました。<br>時間をおいて再度試すか、先生に連絡してください。<br>詳細: " + error.message);
+    })
+    .getInitialData();
 }
 ```
 
@@ -458,14 +374,17 @@ async function pageLoaded() {
 |:---|:---|
 | `searchUniversityCode(row)` | 検索ダイアログを表示 |
 | `searchKeyword()` | インクリメンタルサーチを実行 |
+| `getUniversityDataList()` | 大学データを取得（gzip圧縮対応） |
 
 **キャッシュ仕様:**
 
 | 項目 | 内容 |
 |:---|:---|
 | 保存先 | `localStorage` |
-| キー | `universityCodeList` |
+| キー | `universityDataCache`, `universityDataTimestamp`, `universityCodeSerial` |
 | 有効期限 | 24時間 |
+| 圧縮形式 | gzip（サーバー側） |
+| データ形式 | Base64エンコード |
 
 ---
 
@@ -473,81 +392,25 @@ async function pageLoaded() {
 
 #### `sendExamDataWithRetry()`
 
-フォームの入力値をサーバーに送信（自動リトライ機能付き）。
+フォームの入力値をサーバーに送信（リトライ機能付き）。
 
 ```mermaid
 flowchart TD
     A[送信ボタンクリック] --> B{変更あり?}
     B -->|No| C[処理終了]
-    B -->|Yes| D[ローディング表示]
-    D --> E[フォーム値を収集]
-    E --> F[JSON変換]
-    F --> G[runGoogleScriptWithRetry]
-    G --> H{成功?}
-    H -->|Yes| I[成功メッセージ]
-    H -->|No| J{リトライ回数?}
-    J -->|< 3| K[Exponential Backoff]
-    K --> G
-    J -->|>= 3| L[エラーメッセージ]
-```
-
----
-
-### 5.4 通信リトライ
-
-#### `runGoogleScriptWithRetry(funcName, args, options)`
-
-google.script.runをPromise化し、自動リトライ機能を追加したラッパー関数。
-
-| パラメータ | 型 | デフォルト | 説明 |
-|:---|:---|:---|:---|
-| `funcName` | `String` | - | 呼び出すサーバー関数名 |
-| `args` | `Array` | `[]` | 関数に渡す引数の配列 |
-| `options.maxRetries` | `Number` | `3` | 最大リトライ回数 |
-| `options.initialDelay` | `Number` | `2000` | 初回待機時間 (ms) |
-| `options.factor` | `Number` | `2` | 待機時間の増加係数 |
-| `options.showToast` | `Boolean` | `true` | リトライ通知表示 |
-
-**Exponential Backoff アルゴリズム:**
-
-```
-待機時間 = initialDelay × (factor ^ (試行回数 - 1)) ± ジッター(±20%)
-```
-
-| 試行 | 基本待機時間 | ジッター込み (例) |
-|:---:|:---:|:---:|
-| 1回目 | 2秒 | 1.6〜2.4秒 |
-| 2回目 | 4秒 | 3.2〜4.8秒 |
-| 3回目 | 8秒 | 6.4〜9.6秒 |
-
----
-
-### 5.5 大学データキャッシュ
-
-#### キャッシュ仕様
-
-| 項目 | 内容 |
-|:---|:---|
-| 保存先 | `localStorage` |
-| データキー | `universityDataCache` |
-| タイムスタンプキー | `universityDataTimestamp` |
-| シリアルキー | `universityCodeSerial` |
-| 有効期限 | 24時間 |
-
-#### シリアル番号による有効性チェック
-
-```mermaid
-flowchart TD
-    A[キャッシュ確認] --> B{キャッシュあり?}
-    B -->|No| C[サーバーから取得]
-    B -->|Yes| D{シリアル番号一致?}
-    D -->|No| C
-    D -->|Yes| E{有効期限内?}
-    E -->|No| C
-    E -->|Yes| F[キャッシュ使用]
-    C --> G[gzip解凍]
-    G --> H[キャッシュ保存]
-    H --> I[データ使用]
+    B -->|Yes| D[確認ダイアログ]
+    D -->|キャンセル| C
+    D -->|OK| E[ローディング表示]
+    E --> F[フォーム値を収集]
+    F --> G[JSON変換]
+    G --> H[サーバー送信]
+    H --> I{成功?}
+    I -->|Yes| J[成功メッセージ]
+    I -->|No| K{リトライ上限?}
+    K -->|未達| L[Exponential Backoff]
+    L --> M[待機]
+    M --> H
+    K -->|達成| N[エラーメッセージ]
 ```
 
 ---
@@ -580,12 +443,12 @@ flowchart TD
 
 | 関数名 | 引数 | 戻り値 | 説明 |
 |:---|:---|:---|:---|
-| `getInitialData()` | なし | `JSON String` | 初期データ取得 |
-| `getStudentsList()` | なし | `JSON String` | 生徒一覧取得（教員モード） |
-| `getExamDataList(mailAddr)` | `String` | `JSON String` | 受験データ取得 |
-| `sendExamData(strJuken, mailAddr)` | `String`, `String` | `JSON String` | 受験データ保存 |
-| `sendPdf(mailAddr)` | `String` | - | PDF発行・メール送信 |
-| `getUniversityDataList()` | なし | `JSON String` | 大学データ取得（圧縮） |
+| `getInitialData()` | なし | `Object` | 初期データ取得 |
+| `getStudentsList()` | なし | `Array` | 生徒一覧取得（教員用） |
+| `getExamDataList(mailAddr)` | `String` | `Array` | 受験データ取得 |
+| `sendExamData(strJuken, mailAddr)` | `String`, `String` | `Object` | 受験データ保存 |
+| `sendPdf(mailAddr)` | `String` | `Object` | PDF発行 |
+| `getUniversityDataList()` | なし | `String` | 大学データ取得（gzip圧縮）|
 
 ### レスポンス形式
 

@@ -3,25 +3,42 @@
   //--------------------------------------------------------------------------------
   // グローバルの定義
   //--------------------------------------------------------------------------------
-  let myMailAddress = '';
-  let userRole = '';
-  let inputEnable = false;
-  let studentMailAddress = '';
-  let STUDENT_DATA = {};
-  let EXAM_DATA = {};
-  let examMaxInputCount;
-  let examTypeOptions = [];
-  let resultOptions = [];
-  let teacherData = [];
-  let allStudentsData = [];
-  let currentStudentData = [];
-  let examDataList = [];
-  let dom = {}; // DOMキャッシュ用
-  let universityCodeList = [];
-  let universityCodeSerial = "0";
-  let isItemChanged = false;
-  let isDeleted = false;
-  let isUniversityCodeLoading = false;
+  
+  // アプリケーション設定 (Configuration)
+  const arrDef = {
+    STUDENT_DATA: {},
+    EXAM_DATA: {},
+  }
+
+  const config = {
+    myMailAddress: '',
+    userRole: '',
+    inputEnable: false,
+    studentMailAddress: '',
+    examMaxInputCount: 0,
+    examTypeOptions: [],
+    resultOptions: [],
+    teacherData: [],
+    allStudentsData: [],
+    currentStudentData: [],
+    examDataList: [],
+    universityCodeList: [],
+    universityCodeSerial: "0"
+  };
+
+  // DOM要素キャッシュ
+  const dom = {};
+
+  // 入力用テーブル関連
+  //--------------------------------------------------------------------------------
+  let selectedProceedRadioId = ""; // 選択されている進学先ラジオボタンのID
+
+  // アプリケーション状態 (Status)
+  const status = {
+    isItemChanged: false,
+    isDeleted: false,
+    isUniversityCodeLoading: false
+  };
 
   //================================================================================
   // ヘルパー関数
@@ -51,7 +68,7 @@
   }
 
   //================================================================================
-  // キャッシュ関連
+  // キャッシュ関連(手動でキャッシュをクリア)
   //================================================================================
   function clearUniversityDataCache() {
     try {
@@ -133,23 +150,23 @@
 
   function onInitialDataReceived(strJSON) {
     const allData = JSON.parse(strJSON) || {};
-    myMailAddress = allData.myMailAddress || "";
-    STUDENT_DATA = allData.studentStructure || {};
-    EXAM_DATA = allData.examStructure || {};
-    userRole = allData.userRole || "";
-    examMaxInputCount = allData.examMaxCount || 0;
-    examTypeOptions = allData.examTypeOptions || [];
-    resultOptions = allData.resultOptions || [];
-    teacherData = allData.teacherData || [];
-    currentStudentData = allData.studentData || [];
-    examDataList = allData.examData || [];
-    universityCodeSerial = allData.universityCodeSerial || "0";
+    config.myMailAddress = allData.myMailAddress || "";
+    arrDef.STUDENT_DATA = allData.studentStructure || {};
+    arrDef.EXAM_DATA = allData.examStructure || {};
+    config.userRole = allData.userRole || "";
+    config.examMaxInputCount = allData.examMaxCount || 0;
+    config.examTypeOptions = allData.examTypeOptions || [];
+    config.resultOptions = allData.resultOptions || [];
+    config.teacherData = allData.teacherData || [];
+    config.currentStudentData = allData.studentData || [];
+    config.examDataList = allData.examData || [];
+    config.universityCodeSerial = allData.universityCodeSerial || "0";
     getUniversityDataList();
     setEventListeners();
     disableSendButton(true);
     if (dom.headerTitle) dom.headerTitle.textContent = allData.headerTitle;
-    if (userRole === 'teacher') {
-      if (dom.currentUserName) dom.currentUserName.textContent = "【教員モード】" + teacherData[1];
+    if (config.userRole === 'teacher') {
+      if (dom.currentUserName) dom.currentUserName.textContent = "【教員モード】" + config.teacherData[1];
       disableReportButton(true);
       setElementHidden(dom.selectorSection, true);
       setElementHidden(dom.inputSection, true);
@@ -159,7 +176,7 @@
         .withSuccessHandler(studentsJSON => {
           showProgressDialog(false);
           setDialogBackdrop(dom.progressDialog, true);
-          allStudentsData = JSON.parse(studentsJSON) || [];
+          config.allStudentsData = JSON.parse(studentsJSON) || [];
           showSelector();
         })
         .withFailureHandler(error => {
@@ -172,13 +189,13 @@
     } else if (allData.userRole === 'student') {
       setDialogBackdrop(dom.progressDialog, false);
       setDialogSpinner("受験校データ取得中...");
-      inputEnable = allData.inputEnable;
-      if (inputEnable === false) { // APIで値取得後、サーバサイドで文字列をブールに変換
+      config.inputEnable = allData.inputEnable;
+      if (config.inputEnable === false) { // APIで値取得後、サーバサイドで文字列をブールに変換
         showProgressDialog(false);
         confirmAsync("情報", "現在、管理者により入力が禁止されています。");
         return;
       }
-      studentMailAddress = currentStudentData[STUDENT_DATA.MAIL_ADDR]
+      config.studentMailAddress = config.currentStudentData[arrDef.STUDENT_DATA.MAIL_ADDR];
       setStudentName("targetStudentName");
       setElementHidden(dom.selectorSection, true);
       setElementHidden(dom.inputSection, false);
@@ -187,7 +204,7 @@
         .withSuccessHandler(examJSON => {
           showProgressDialog(false);
           setDialogBackdrop(dom.progressDialog, true);
-          examDataList = JSON.parse(examJSON) || [];
+          config.examDataList = JSON.parse(examJSON) || [];
           setInputTable(); // データを反映
         })
         .withFailureHandler(error => {
@@ -210,7 +227,7 @@
   function showSelector() {
     setElementHidden(dom.selectorSection, false);
     setElementHidden(dom.studentNumberSelection, true);
-    const classes = Array.from(new Set(allStudentsData.map(arr => arr[STUDENT_DATA.CLASS])));
+    const classes = Array.from(new Set(config.allStudentsData.map(arr => arr[arrDef.STUDENT_DATA.CLASS])));
     classes.sort(); // クラス名でソート
     createClassSelector(classes);
   }
@@ -236,7 +253,7 @@
     setElementHidden(dom.inputSection, true);
     const selClassId = dom.classSelection;
     const selClass = selClassId.value;
-    const students = allStudentsData.filter(row => String(row[STUDENT_DATA.CLASS]) === String(selClass));
+    const students = config.allStudentsData.filter(row => String(row[arrDef.STUDENT_DATA.CLASS]) === String(selClass));
     if (students.length === 0) {
       setElementHidden(dom.studentNumberSelection, true);
       return;
@@ -252,16 +269,16 @@
     selNumDiv.appendChild(defaultOption);
     students.forEach(student => {
       const option = document.createElement('option');
-      option.value = student[STUDENT_DATA.MAIL_ADDR];
-      let strNum = ('0' + student[STUDENT_DATA.NUMBER] + '：').slice(-3);
-      option.textContent = strNum + student[STUDENT_DATA.NAME];
+      option.value = student[arrDef.STUDENT_DATA.MAIL_ADDR];
+      let strNum = ('0' + student[arrDef.STUDENT_DATA.NUMBER] + '：').slice(-3);
+      option.textContent = strNum + student[arrDef.STUDENT_DATA.NAME];
       selNumDiv.appendChild(option);
     });
   }
 
   async function handleStudentSelect() {
     try {
-      if (isItemChanged && !await confirmAsync("確認", "変更を保存せずに移動してよろしいですか")) {
+      if (status.isItemChanged && !await confirmAsync("確認", "変更を保存せずに移動してよろしいですか")) {
         return;
       }
       const selectEl = dom.studentNumberSelection;
@@ -269,8 +286,8 @@
       if (mailAddr.length === 0) {
         return;
       }
-      currentStudentData = allStudentsData.find(row => row[0] === mailAddr)
-      studentMailAddress = mailAddr;
+      config.currentStudentData = config.allStudentsData.find(row => row[0] === mailAddr)
+      config.studentMailAddress = mailAddr;
       setStudentName("targetStudentName");
       getExamDataList()
     } catch (e) {
@@ -317,66 +334,102 @@
   const universityMap = new Map;
 
   async function getUniversityDataList() {
-    const CACHE_KEY = 'universityDataCache';
-    const CACHE_TIMESTAMP_KEY = 'universityDataTimestamp';
-    const CACHE_KEY_SERIAL = 'universityCodeSerial';
-    const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24時間
-    // clearUniversityDataCache(); // デバッグ用（直接取得を強制）
-    try { // キャッシュの確認
-      const cachedData = localStorage.getItem(CACHE_KEY);
-      const cachedTimestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
-      const cachedSerial = localStorage.getItem(CACHE_KEY_SERIAL);
-      if (cachedData && cachedTimestamp && cachedSerial) {
-        const age = Date.now() - parseInt(cachedTimestamp);
-        if (String(cachedSerial) === String(universityCodeSerial) && age < CACHE_DURATION) {
-          const compressedData = await base64ToUint8ArrayAsync(cachedData); // Base64デコードしてUint8Arrayに変換
-          const decompressed = await decompressGzipAsync(compressedData); // gzip解凍（ブラウザ標準API使用）
-          isUniversityCodeLoading = true;
-          disableSearchButton(true);
-          setStatusMessage('大学データ読込中（キャッシュ）');
-          onUniversityDataReceived(decompressed); // キャッシュから直接 JSON パース
-          return;
-        }
-      }
-    } catch (e) {
-      console.warn('localStorageへのアクセスに失敗:', e);
-    }
-    isUniversityCodeLoading = true; // キャッシュがない場合はサーバーから取得
-    disableSearchButton(true);
-    setStatusMessage('大学データ取得中（約600KB）...');
+    const cacheConfig = {
+      dataKey: 'universityDataCache',
+      timestampKey: 'universityDataTimestamp',
+      serialKey: 'universityCodeSerial',
+      duration: 24 * 60 * 60 * 1000 // 24時間
+    };    
+    if (await tryLoadFromCache(cacheConfig)) return; // キャッシュからデータ取得を試行
+    else await loadFromServer(cacheConfig); // サーバーからデータ取得
+  }
+
+  async function tryLoadFromCache(conf) {
     try {
-      const responseStr = await new Promise((resolve, reject) => { // サーバーからデータを取得（Promise化）
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .getUniversityDataList();
-      });
-      const response = JSON.parse(responseStr); // サーバーからのレスポンスをパース
-      try { // 解凍したJSONをキャッシュに保存
-        localStorage.setItem(CACHE_KEY, response);
-        localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
-        localStorage.setItem(CACHE_KEY_SERIAL, universityCodeSerial);
-        //console.log(`大学データをキャッシュに保存: ${decompressed.length}文字`);
-      } catch (e) {
-        console.warn('localStorageへの保存に失敗:', e);
+      const cachedData = localStorage.getItem(conf.dataKey);
+      const cachedTimestamp = localStorage.getItem(conf.timestampKey);
+      const cachedSerial = localStorage.getItem(conf.serialKey);
+      if (!isValidCache(cachedData, cachedTimestamp, cachedSerial, conf)) {
+        return false;
       }
-      const compressedData = await base64ToUint8ArrayAsync(response); // Base64デコードしてUint8Arrayに変換
-      const decompressed = await decompressGzipAsync(compressedData); // gzip解凍（ブラウザ標準API使用）
+      const decompressed = await decompressCachedData(cachedData);
+      updateLoadingState('大学データ読込中（キャッシュ）');
       onUniversityDataReceived(decompressed);
+      return true;
     } catch (e) {
-      console.error('大学データの取得・解凍に失敗:', e);
-      try { // 解凍失敗時はキャッシュをクリア
-        localStorage.removeItem(CACHE_KEY);
-        localStorage.removeItem(CACHE_TIMESTAMP_KEY);
-        localStorage.removeItem(CACHE_KEY_SERIAL);
-      } catch (storageError) {
-        console.warn('キャッシュクリアに失敗:', storageError);
-      }
-      showProgressDialog(false);
-      await confirmAsync("エラー", "大学データの読み込みに失敗しました。<br>ページを再読み込みしてください。<br>詳細: " + e.message);
+      console.warn('キャッシュアクセスに失敗:', e);
+      return false;
     }
   }
 
+  function isValidCache(data, timestamp, serial, conf) {
+    if (!data || !timestamp || !serial) return false;
+    const isCurrentSerial = String(serial) === String(config.universityCodeSerial);
+    const age = Date.now() - parseInt(timestamp);
+    const isFresh = age < conf.duration;
+    return isCurrentSerial && isFresh;
+  }
+
+  async function decompressCachedData(cachedData) {
+    const compressedData = await base64ToUint8ArrayAsync(cachedData);
+    return await decompressGzipAsync(compressedData);
+  }
+
+  async function loadFromServer(config) {
+    updateLoadingState('大学データ取得中...');
+    try {
+      const response = await fetchUniversityDataFromServer(); // サーバから取得したbase64
+      await saveToCache(response, config);
+      const decompressed = await decompressCachedData(response);
+      onUniversityDataReceived(decompressed);
+    } catch (e) {
+      handleServerError(e, config);
+    }
+  }
+
+  async function fetchUniversityDataFromServer() {
+    return await new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)
+        .getUniversityDataList();
+    });
+  }
+
+  async function saveToCache(response, conf) {
+    try {
+      localStorage.setItem(conf.dataKey, response);
+      localStorage.setItem(conf.timestampKey, Date.now().toString());
+      localStorage.setItem(conf.serialKey, config.universityCodeSerial);
+    } catch (e) {
+      console.warn('キャッシュ保存に失敗:', e);
+    }
+  }
+
+  function updateLoadingState(message) {
+    status.isUniversityCodeLoading = true;
+    disableSearchButton(true);
+    setStatusMessage(message);
+  }
+
+  function handleServerError(error, conf) {
+    console.error('サーバーデータ取得に失敗:', error);
+    // キャッシュをクリア
+    clearCache(conf);
+    showProgressDialog(false);
+    confirmAsync("エラー", "大学データの読み込みに失敗しました。<br>ページを再読み込みしてください。<br>詳細: " + error.message);
+  }
+
+  function clearCache(config) {
+    try {
+      localStorage.removeItem(config.dataKey);
+      localStorage.removeItem(config.timestampKey);
+      localStorage.removeItem(config.serialKey);
+    } catch (e) {
+      console.warn('キャッシュクリアに失敗:', e);
+    }
+  }
+  /*
   // Base64をUint8Arrayに変換 fetch APIのData URIスキームを利用
   async function base64ToUint8ArrayAsync(base64) {
     // dataスキームを使ってBase64をBlobとして読み込む
@@ -384,25 +437,43 @@
     const buffer = await res.arrayBuffer();
     return new Uint8Array(buffer);
   }
+  */
+  async function base64ToUint8ArrayAsync(base64) {
+    try {
+      // atobでBase64をバイナリ文字列にデコード
+      const binaryString = atob(base64);
+      const len = binaryString.length;
+      
+      // バイナリ文字列をUint8Arrayに転記
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      return bytes;
+    } catch (e) {
+      throw new Error('Base64のデコードに失敗しました: ' + e.message);
+    }
+  }
 
   // gzip解凍（ブラウザ標準API使用）
   async function decompressGzipAsync(compressedData) {
-    if (!window.DecompressionStream) { // DecompressionStreamの対応確認
+    if (!window.DecompressionStream) {
       throw new Error('このブラウザはDecompressionStreamに対応していません。Chrome 80+を使用してください。');
     }
-    const blob = new Blob([compressedData]); // Blobを作成
-    const decompressedStream = blob.stream().pipeThrough( // DecompressionStreamで解凍
+    const blob = new Blob([compressedData]);
+    const decompressedStream = blob.stream().pipeThrough(
       new DecompressionStream('gzip')
     );
-    const response = new Response(decompressedStream); // Responseオブジェクトとして読み取り
+    const response = new Response(decompressedStream);
     const decompressedText = await response.text();
     return decompressedText;
   }
 
   function onUniversityDataReceived(str) {
-    universityCodeList = JSON.parse(str) || [];
-    universityCodeList.forEach(drow => universityMap.set(String(drow[0]), drow[1]));
-    isUniversityCodeLoading = false;
+    config.universityCodeList = JSON.parse(str) || [];
+    config.universityCodeList.forEach(drow => universityMap.set(String(drow[0]), drow[1]));
+    status.isUniversityCodeLoading = false;
     disableSearchButton(false);
     setStatusMessage('');
   }
@@ -410,7 +481,6 @@
   function setStatusMessage(text) {
     const idStatusMsg = dom.statusMessage;
     idStatusMsg.innerHTML = '';
-
     if (text.length) {
       const spanSpinner = document.createElement("span");
       spanSpinner.className = "span-spinner"
@@ -467,8 +537,6 @@
     dom.sendFormButton2.addEventListener("click", sendExamDataWithRetry);
     dom.issueReportButton1.addEventListener("click", requestReport);
     dom.issueReportButton2.addEventListener("click", requestReport);
-    //document.getElementById("cancelButton1").addEventListener("click", showSelector);
-    //document.getElementById("cancelButton2").addEventListener("click", showSelector);
     // searchtable全体にリスナーを設定
     const searchTableDiv = dom.searchTableContainer;
 
@@ -486,8 +554,8 @@
     dom.moveLeftButton.addEventListener('click', () => { displayStart -= displayStep; searchKeyword(); }) // 前のページへ
     dom.moveRightButton.addEventListener('click', () => { displayStart += displayStep; searchKeyword(); }); // 次のページへ
     dom.cancelButton.addEventListener("click", cancelSearch);
-    dom.searchBackground.addEventListener('click', cancelSearch);
-    dom.searchBody.addEventListener('click', (event) => { event.stopPropagation(); });
+    dom.searchBackground.addEventListener("click", cancelSearch);
+    dom.searchBody.addEventListener("click", (event) => { event.stopPropagation(); });
 
     // スクロール位置の取得
     window.addEventListener('scroll', () => { currentY = window.scrollY; currentX = window.scrollX; });
@@ -496,14 +564,13 @@
   //--------------------------------------------------------------------------------
   // 入力用テーブル関連
   //--------------------------------------------------------------------------------
-  let selectedProceedRadioId = ""; // 選択されている進学先ラジオボタンのID
 
   function setStudentName(id) {
     let str = '';
-    str += (currentStudentData?.[STUDENT_DATA.GRADE] || "") + '年 ';
-    str += (currentStudentData?.[STUDENT_DATA.CLASS] || "") + '組 ';
-    str += (currentStudentData?.[STUDENT_DATA.NUMBER] || "") + '番 氏名 ';
-    str += (currentStudentData?.[STUDENT_DATA.NAME] || "");
+    str += (config.currentStudentData?.[arrDef.STUDENT_DATA.GRADE] || "") + '年 ';
+    str += (config.currentStudentData?.[arrDef.STUDENT_DATA.CLASS] || "") + '組 ';
+    str += (config.currentStudentData?.[arrDef.STUDENT_DATA.NUMBER] || "") + '番 氏名 ';
+    str += (config.currentStudentData?.[arrDef.STUDENT_DATA.NAME] || "");
     if (dom[id]) dom[id].textContent = str;
   }
 
@@ -530,10 +597,10 @@
 
     const tableBody = document.createElement('tbody');
 
-    for (let i = 0; i < examMaxInputCount; i++) {
+    for (let i = 0; i < config.examMaxInputCount; i++) {
       const rowClone = template.content.cloneNode(true);
-      const hasData = i < examDataList.length;
-      const jukenItem = hasData ? examDataList[i] : null; // データがあれば取得、なければnull
+      const hasData = i < config.examDataList.length;
+      const jukenItem = hasData ? config.examDataList[i] : null; // データがあれば取得、なければnull
       const dcode = rowClone.querySelector('.university-code');
       const dname = rowClone.querySelector('.university-name');
       const keitaiCell = rowClone.querySelector('.exam-type-select-cell');
@@ -555,12 +622,12 @@
       dom['deleteButton' + (i + 1)] = clearBtn;
 
       if (hasData) {
-        dcode.value = jukenItem[EXAM_DATA.DAIGAKU_CODE] || '';
-        dname.textContent = jukenItem[EXAM_DATA.DAIGAKU_NAME] || '';
-        keitaiCell.appendChild(createExamTypeSelect(i, jukenItem[EXAM_DATA.KEITAI] || ''));
-        gouhiCell.appendChild(createResultSelect(i, jukenItem[EXAM_DATA.GOUHI] || ''));
+        dcode.value = jukenItem[arrDef.EXAM_DATA.DAIGAKU_CODE] || '';
+        dname.textContent = jukenItem[arrDef.EXAM_DATA.DAIGAKU_NAME] || '';
+        keitaiCell.appendChild(createExamTypeSelect(i, jukenItem[arrDef.EXAM_DATA.KEITAI] || ''));
+        gouhiCell.appendChild(createResultSelect(i, jukenItem[arrDef.EXAM_DATA.GOUHI] || ''));
         // サーバサイドから渡されたbool値は文字列
-        if (isTrue(jukenItem[EXAM_DATA.SHINGAKU]) === true) {
+        if (isTrue(jukenItem[arrDef.EXAM_DATA.SHINGAKU]) === true) {
           shingakuRadio.checked = true;
           selectedProceedRadioId = shingakuRadio.id;
         }
@@ -598,14 +665,14 @@
     inputTableContainer.replaceChildren();
     inputTableContainer.appendChild(table);
     // 大学データが既にロードされている場合は、ボタンを有効にする
-    if (isUniversityCodeLoading === false && universityCodeList.length > 0) {
+    if (status.isUniversityCodeLoading === false && config.universityCodeList.length > 0) {
       disableSearchButton(false);
     }
   }
 
   function checkDuplicate(inputId) {
     const input = dom[inputId];
-    for (let i = 0; i < examMaxInputCount; i++) {
+    for (let i = 0; i < config.examMaxInputCount; i++) {
       let id = 'universityCode' + (i + 1);
       const ddata = dom[id];
 
@@ -648,7 +715,7 @@
     select.id = 'examType' + (i + 1);
     dom['examType' + (i + 1)] = select;
 
-    examTypeOptions.forEach(optionValue => {
+    config.examTypeOptions.forEach(optionValue => {
       const option = document.createElement('option');
       option.value = optionValue;
       option.textContent = optionValue;
@@ -665,7 +732,7 @@
     select.name = 'result' + (i + 1);
     select.id = 'result' + (i + 1);
     dom['result' + (i + 1)] = select;
-    resultOptions.forEach(optionValue => {
+    config.resultOptions.forEach(optionValue => {
       const option = document.createElement('option');
       option.value = optionValue;
       option.textContent = optionValue;
@@ -718,8 +785,8 @@
   }
 
   function setItemChanged() {
-    if (!isItemChanged) {
-      isItemChanged = true;
+    if (!status.isItemChanged) {
+      status.isItemChanged = true;
       disableSendButton(false);
       disableReportButton(true);
       setSendMessage('変更有→')
@@ -746,16 +813,12 @@
       window.scrollTo(searchPosX, searchPosY);
       setElementHidden(dom.searchBackground, false);
       setElementHidden(dom.inputBackground, true);
-      //document.getElementById("searchBackground").style.display = "block";
-      //document.getElementById("inputBackground").style.display = "none";
     } else {
       searchPosY = currentY;
       searchPosX = currentX;
       window.scrollTo(inputPosX, inputPosY);
       setElementHidden(dom.searchBackground, true);
       setElementHidden(dom.inputBackground, false);
-      //document.getElementById("searchBackground").style.display = "none";
-      //document.getElementById("inputBackground").style.display = "block";
     }
   }
 
@@ -777,7 +840,6 @@
   function setSearchMessage(text) {
     const idStatusMsg = dom.searchMessage;
     idStatusMsg.innerHTML = '';
-
     if (text.length) {
       const spanSpinner = document.createElement("span");
       spanSpinner.className = "span-spinner"
@@ -811,7 +873,7 @@
       resultsContainer.replaceChildren(); // 前回の検索結果をクリ
       // ----- 大学データ全件事前ロード
       const keywords = keywordInput.replace(/　/g, ' ').split(' ').filter(kw => kw); // 空のキーワードを除外
-      const filteredData = universityCodeList.filter(row =>
+      const filteredData = config.universityCodeList.filter(row =>
         keywords.every(kw => (row[1] || "").includes(kw) || String(row[0] || "").includes(kw))
       );
       const limitedData = filteredData.slice(displayStart, displayStart + displayStep);
@@ -915,9 +977,7 @@
       factor = 2,           // 待機時間の増加係数 (2秒 -> 4秒 -> 8秒...)
       showToast = true      // リトライ時に画面に通知を出すか
     } = options;
-
     let attempt = 0;
-
     while (true) {
       try {
         // google.script.run を Promise でラップして実行
@@ -925,7 +985,6 @@
           const runner = google.script.run
             .withSuccessHandler(resolve)
             .withFailureHandler(reject);
-
           // 関数名で動的に呼び出し、引数を展開して渡す
           if (typeof runner[funcName] !== 'function') {
             reject(new Error(`Function '${funcName}' not found in google.script.run`));
@@ -933,34 +992,27 @@
           }
           runner[funcName](...args);
         });
-
       } catch (error) {
         attempt++;
-
         // リトライ上限に達したらエラーを投げて終了
         if (attempt > maxRetries) {
           console.error(`[Retry Failed] ${funcName}: Max retries reached.`, error);
           throw error;
         }
-
         // 待機時間を計算 (Exponential Backoff)
         // delay = initialDelay * (factor ^ (attempt - 1))
         let delay = initialDelay * Math.pow(factor, attempt - 1);
-
         // ジッター (Jitter) を追加: 待機時間を ±20% ランダムにずらす
         // これにより、全員が一斉にリトライして再度衝突するのを防ぐ
         const jitter = delay * 0.2 * (Math.random() - 0.5) * 2;
         const finalDelay = Math.round(delay + jitter);
-
         console.warn(`[Retry ${attempt}/${maxRetries}] ${funcName} failed. Retrying in ${finalDelay}ms...`, error);
-
         // ユーザーへの通知（既存の setStatusMessage 等があれば活用）
         if (showToast && typeof setStatusMessage === 'function') {
           setStatusMessage(`混雑しています。${Math.round(finalDelay / 1000)}秒後に再試行します... (${attempt}/${maxRetries})`, true);
         } else if (showToast && typeof setDialogSpinner === 'function') {
           setDialogSpinner(` 混雑中...再接続(${attempt})`);
         }
-
         // 指定時間待機
         await new Promise(resolve => setTimeout(resolve, finalDelay));
       }
@@ -968,53 +1020,80 @@
   }
 
   async function sendExamDataWithRetry() {
-    if (!isItemChanged) return;
+    if (!status.isItemChanged) return;
+    // ユーザー確認
+    if (!await confirmDataSave()) return;
+    // UI状態の初期化
+    initializeSendUI();
+    // データ収集と送信
+    try {
+      const examData = collectExamData();
+      const response = await runGoogleScriptWithRetry('sendExamData', [JSON.stringify(examData), config.studentMailAddress]);
+      onExamDataSent(response);
+    } catch (error) {
+      handleSendError(error);
+    }
+  }
+
+  async function confirmDataSave() {
     window.onbeforeunload = null;
-    let result = await confirmAsync("データの保存", "データを送信しますか？");
-    if (!result) return;
-    setDialogSpinner(" 志望校データ送信中・・・")
+    return await confirmAsync("データの保存", "データを送信しますか？");
+  }
+
+  function initializeSendUI() {
+    setDialogSpinner(" 志望校データ送信中・・・");
     showProgressDialog(true);
     disableSendButton(true);
     disableReportButton(false);
-    examDataList.length = 0;
-    for (let i = 0; i < examMaxInputCount; i++) {
-      const dcode = dom['universityCode' + (i + 1)].value;
-      const isDelete = dom['examType' + (i + 1)].disabled;
-      if (dcode || dcode.length > 0) {
-        let rowData = [];
-        rowData[EXAM_DATA.TIME_STAMP] = '';
-        rowData[EXAM_DATA.MAIL_ADDR] = currentStudentData[0];
-        rowData[EXAM_DATA.DEL_FLAG] = isDelete;
-        rowData[EXAM_DATA.DAIGAKU_CODE] = String(dcode);
-        rowData[EXAM_DATA.DAIGAKU_NAME] = universityMap.get(String(dcode));
-        rowData[EXAM_DATA.GOUHI] = dom['result' + (i + 1)].value;
-        rowData[EXAM_DATA.KEITAI] = dom['examType' + (i + 1)].value;
-        rowData[EXAM_DATA.SHINGAKU] = dom['proceed' + (i + 1)].checked;
-        examDataList.push(rowData);
-      } else {
-        dom['universityName' + (i + 1)].textContent = '';
+    config.examDataList.length = 0;
+  }
+
+  function collectExamData() {
+    const examData = [];
+    
+    for (let i = 0; i < config.examMaxInputCount; i++) {
+      const rowData = createExamDataRow(i + 1);
+      if (rowData) {
+        examData.push(rowData);
       }
     }
-    const strJuken = JSON.stringify(examDataList);
-    try {
-      const response = await runGoogleScriptWithRetry('sendExamData', [strJuken, studentMailAddress]);
-      onExamDataSent(response);
-    } catch (error) {
-      console.error(error);
-      showProgressDialog(false); // くるくるを消す
-      confirmAsync("エラー", "データの保存に失敗しました。<br>時間をおいて再度試すか、先生に連絡してください。<br>詳細: " + error.message);
+    
+    return examData;
+  }
+
+  function createExamDataRow(index) {
+    const dcode = dom[`universityCode${index}`].value;
+    const isDelete = dom[`examType${index}`].disabled;
+    if (!dcode || dcode.length === 0) {
+      dom[`universityName${index}`].textContent = '';
+      return null;
     }
+    return [
+      '', // TIME_STAMP
+      config.currentStudentData[0], // MAIL_ADDR
+      isDelete, // DEL_FLAG
+      String(dcode), // DAIGAKU_CODE
+      universityMap.get(String(dcode)), // DAIGAKU_NAME
+      dom[`result${index}`].value, // GOUHI
+      dom[`examType${index}`].value, // KEITAI
+      dom[`proceed${index}`].checked // SHINGAKU
+    ];
+  }
+
+  function handleSendError(error) {
+    console.error(error);
+    showProgressDialog(false);
+    confirmAsync("エラー", "データの保存に失敗しました。<br>時間をおいて再度試すか、先生に連絡してください。<br>詳細: " + error.message);
   }
 
   function onExamDataSent(strJSON) {
     setSendMessage('');
-    isItemChanged = false;
+    status.isItemChanged = false;
     disableSendButton(true);
     showProgressDialog(false);
-
     // サーバーから返された最新データで更新
     if (strJSON) {
-      examDataList = JSON.parse(strJSON);
+      config.examDataList = JSON.parse(strJSON);
       setInputTable();
     }
   }
@@ -1023,7 +1102,7 @@
     setDialogSpinner(" 志望校データ取得中・・・");
     showProgressDialog(true);
     setSendMessage('');
-    isItemChanged = false;
+    status.isItemChanged = false;
     google.script.run
       .withSuccessHandler(onExamDataReceived)
       .withFailureHandler(error => {
@@ -1031,26 +1110,26 @@
         showProgressDialog(false); // くるくるを消す
         confirmAsync("エラー", "処理に失敗しました。<br>時間をおいて再度試すか、先生に連絡してください。<br>詳細: " + error.message);
       })
-      .getExamDataList(studentMailAddress)
+      .getExamDataList(config.studentMailAddress)
   }
 
   function onExamDataReceived(strJSON) {
-    isDeleted = false;
-    examDataList = JSON.parse(strJSON);
+    status.isDeleted = false;
+    config.examDataList = JSON.parse(strJSON);
     showProgressDialog(false);
     disableReportButton(false);
     //setElementHidden("selectorSection", true);
     setElementHidden(dom.inputSection, false);
     setInputTable();
     //setInputVisibility("visible");
-    if (isUniversityCodeLoading === false) disableSearchButton(false);
+    if (status.isUniversityCodeLoading === false) disableSearchButton(false);
   }
 
   //--------------------------------------------------------------------------------
   // 調査書発行願
   //--------------------------------------------------------------------------------
   async function requestReport() {
-    let result = await confirmAsync("メール送信", myMailAddress + "<br>に発行願を送信しますか？");
+    let result = await confirmAsync("メール送信", config.myMailAddress + "<br>に発行願を送信しますか？");
     if (!result) return;
     setDialogSpinner(" 交付願PDF作成中・・・");
     showProgressDialog(true);
@@ -1061,7 +1140,7 @@
         showProgressDialog(false); // くるくるを消す
         confirmAsync("エラー", "処理に失敗しました。<br>時間をおいて再度試すか、先生に連絡してください。<br>詳細: " + error.message);
       })
-      .sendPdf(studentMailAddress);
+      .sendPdf(config.studentMailAddress);
   }
 
   function onReportCreated() {

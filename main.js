@@ -1,7 +1,7 @@
 /**
  * 受験校調査システム (Preferred school survey system)
- * Version 2.3.0
- * * Copyright (c) 2025 Shigeru Suzuki
+ * Version 2.3.1
+ * * Copyright (c) 2026 Shigeru Suzuki
  * * Released under the MIT License.
  * https://opensource.org/licenses/MIT
  * * [免責事項]
@@ -167,6 +167,26 @@ function checkAndUpdateCache(sheetName) {
       console.error(`キャッシュ更新エラー(${sheetName}): ${err.message}`);
     }
   }
+  // 大学データシートが変更された場合、シリアル番号を自動インクリメント
+  if (sheetName === SHEET_NAMES.DAIGAKU) {
+    try {
+      incrementUniversitySerial();
+    } catch (err) {
+      console.error(`シリアル番号更新エラー: ${err.message}`);
+    }
+  }
+}
+
+// 大学データシリアル番号のインクリメント（設定シートセルB5の整数値をインクリメントする）
+function incrementUniversitySerial() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.SETTINGS);
+  if (!sheet) {
+    throw new Error('設定シートが見つかりません');
+  }
+  const serialCell = sheet.getRange('B5');
+  const currentSerial = parseInt(serialCell.getValue()) || 0;
+  serialCell.setValue(currentSerial + 1);
+  return newSerial;
 }
 
 
@@ -307,7 +327,7 @@ function getUniversityDataList() {
     // Base64エンコード
     const base64 = Utilities.base64Encode(compressedBytes);
 
-    return JSON.stringify(base64);
+    return base64;
   } catch (e) {
     console.error('getUniversityDataListでエラー: ' + e);
     throw new Error('作成者に連絡してください。');
@@ -1045,9 +1065,6 @@ function importUniversityData() {
   universitySheet.appendRow(outputHeader);
   universitySheet.getRange(2, 1, universityDataRows.length, outputHeader.length).setValues(universityDataRows);
   // シリアル番号の更新
-  const sheetSettins = activeSpreadsheet.getSheetByName(SHEET_NAMES.SETTINGS)
-  const daigakuSerial = sheetSettins.getRange('B5').getValue();
-  sheetSettins.getRange('B5').setValue(daigakuSerial + 1);
-
+  incrementUniversitySerial();
   Browser.msgBox("インポートが完了しました。");
 }

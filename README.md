@@ -1,6 +1,6 @@
 # 受験校調査アプリ (Preferred School Survey System)
 
-[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.3.1-blue.svg)](./VERSION_CHANGES.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 
@@ -35,19 +35,19 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 
 ---
 
-## ✨ v2.4.0 新機能ハイライト
+## ✨ v2.2.0 新機能ハイライト
 
-> **2025年12月リリース** - パフォーマンスと信頼性を大幅に強化！
+> **2025年12月リリース** - 信頼性と堅牢性を強化！
 
 | 改善項目 | 詳細 |
 |:---|:---|
-| 📦 **圧縮転送** | 大学データのgzip圧縮+Base64転送で通信効率化 |
-| 🔄 **シリアル管理** | 大学データキャッシュのシリアル番号による自動更新 |
-| 🔁 **リトライ処理** | Exponential Backoffによる自動リトライ機能 |
-| ⚡ **即時反映** | シート編集時のサーバーキャッシュ自動更新 |
-| 🗑️ **自動削除** | 論理削除レコードの定期的完全削除 |
-| 🔥 **ウォームアップ** | 3時間ごとのサーバーキャッシュ自動更新 |
+| 🎨 **モダンUI** | CSS変数によるデザインシステム導入 |
+| 🌙 **ダークモード** | `prefers-color-scheme` 対応 |
+| ⚡ **パフォーマンス** | Sheets API `batchGet` による高速初期化 |
+| 📱 **レスポンシブ** | モバイル向けテーブルのグリッド表示 |
 | 💾 **キャッシュ** | 大学データ(Client)と設定・マスタデータ(Server)のキャッシュ |
+| 🔐 **堅牢性** | null安全処理とバリデーション強化 |
+| 🚀 **高速保存** | 保存時のロック時間短縮と処理効率化 (v2.1.0) |
 | 🛡️ **堅牢性** | データ型・比較演算子の厳格化と不整合バグの修正 (v2.2.0) |
 
 詳しくは [VERSION_CHANGES.md](./VERSION_CHANGES.md) をご覧ください。
