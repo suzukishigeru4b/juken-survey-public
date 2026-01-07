@@ -1,5 +1,30 @@
 # バージョン変更履歴 (VERSION_CHANGES.md)
 
+## Ver 2.3.2 (2026年1月)
+
+### 修正および改善
+
+#### 1. エラーログ機能の追加
+- **新機能**: `logErrorToSheet()` 関数を追加し、エラー発生時にスプレッドシートに詳細なログを記録するようにしました
+  - **エラーログシート**: `ERROR_LOG` シートを自動作成し、エラー情報を蓄積
+  - **記録内容**: 日時、ユーザー、エラー種別、メッセージ、スタックトレース
+  - **排他制御**: `LockService` を使用し、同時書き込みを防止
+  - **自動適用**: 主要な全関数の catch ブロックにエラーログ記録を追加
+
+#### 2. エラーハンドリングの強化
+- **対象関数**: 以下の主要関数にエラーログ記録を追加
+  - `getInitialData()`, `getStudentsList()`, `getUniversityDataList()`
+  - `getExamDataList()`, `sendExamData()`, `sendPdf()`
+  - `getUniversityDataApi()`, `getBatchSheetDataWithCache()`, `getSheetDataApi()`
+  - `deleteMarkedRows()`, `checkAndUpdateCache()`, `incrementUniversitySerial()`
+
+#### 3. 運用保守性の向上
+- **デバッグ効率化**: エラー発生時の原因特定が容易に
+- **監査証跡**: 誰がいつどのようなエラーを発生させたかを記録
+- **障害対応**: エラーパターンの分析と再発防止に貢献
+
+---
+
 ## Ver 2.3.1 (2026年1月)
 
 ### 修正および改善

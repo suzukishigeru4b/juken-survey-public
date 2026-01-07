@@ -1,6 +1,6 @@
 /**
  * 受験校調査システム (Preferred school survey system)
- * Version 2.3.1
+ * Version 2.3.2
  * * Copyright (c) 2026 Shigeru Suzuki
  * * Released under the MIT License.
  * https://opensource.org/licenses/MIT
@@ -28,7 +28,8 @@ const SHEET_NAMES = {
   SEL_KEITAI: '受験形態選択肢',
   SETTINGS: '設定',
   PDF_TEMPLATE: '調査書交付願',
-  KOUNAI_DB: '校内DB用'
+  KOUNAI_DB: '校内DB用',
+  ERROR_LOG: 'エラーログ'
 };
 
 // 受験データ列定義
@@ -163,16 +164,18 @@ function checkAndUpdateCache(sheetName) {
     // ※ Sheets APIを使用しているため、onEditはインストーラブルトリガーとして設定する必要があります
     try {
       warmUpCache(sheetName);
-    } catch (err) {
-      console.error(`キャッシュ更新エラー(${sheetName}): ${err.message}`);
+    } catch (e) {
+      logErrorToSheet('checkAndUpdateCache', e.message, e.stack);
+      console.error(`キャッシュ更新エラー(${sheetName}): ${e.message}`);
     }
   }
   // 大学データシートが変更された場合、シリアル番号を自動インクリメント
   if (sheetName === SHEET_NAMES.DAIGAKU) {
     try {
       incrementUniversitySerial();
-    } catch (err) {
-      console.error(`シリアル番号更新エラー: ${err.message}`);
+    } catch (e) {
+      logErrorToSheet('incrementUniversitySerial', e.message, e.stack);
+      console.error(`シリアル番号更新エラー: ${e.message}`);
     }
   }
 }
@@ -292,6 +295,7 @@ function getInitialData() {
     }
     return JSON.stringify(allData);
   } catch (e) {
+    logErrorToSheet('getInitialData', e.message, e.stack);
     console.error('getInitialDataでエラー: ' + e);
     //    throw new Error('作成者に連絡してください。' + e.message); // デバッグ用
     throw new Error('作成者に連絡してください。');
@@ -308,6 +312,7 @@ function getStudentsList() {
     const allStudentsData = getSheetDataApiWithCache(SHEET_NAMES.STUDENTS) || [];
     return JSON.stringify(allStudentsData.slice(1)); // ヘッダーを除去して返却
   } catch (e) {
+    logErrorToSheet('getStudentsList', e.message, e.stack);
     console.error('getStudentsListでエラー: ' + e);
     throw new Error('作成者に連絡してください。');
   }
@@ -329,6 +334,7 @@ function getUniversityDataList() {
 
     return base64;
   } catch (e) {
+    logErrorToSheet('getUniversityDataList', e.message, e.stack);
     console.error('getUniversityDataListでエラー: ' + e);
     throw new Error('作成者に連絡してください。');
   }
@@ -369,6 +375,7 @@ function getExamDataList(mailAddr = Session.getActiveUser().getEmail()) {
     // 注意：DEL_FLAGとSHINGAKUは文字列のままフロントエンドに渡される
     return JSON.stringify(examData);
   } catch (e) {
+    logErrorToSheet('getExamDataList', e.message, e.stack);
     console.error('getExamDataListでエラー: ' + e);
     throw new Error('作成者に連絡してください。');
   }
@@ -539,6 +546,7 @@ function sendExamData(strJuken, mailAddr = Session.getActiveUser().getEmail()) {
     // ===== STEP 5: 最新データを返却 =====
     return getExamDataList(mailAddr);
   } catch (e) {
+    logErrorToSheet('sendExamData', e.message, e.stack);
     console.error('sendExamDataでエラー: ' + e);
     if (e.message && e.message.includes('他のユーザーが編集中')) {
       throw e;
@@ -630,6 +638,7 @@ function sendPdf(mailAddr = Session.getActiveUser().getEmail()) {
       attachments: attachmentfiles
     });
   } catch (e) {
+    logErrorToSheet('sendPdf', e.message, e.stack);
     console.error('sendPdfでエラー: ' + e);
     throw new Error('作成者に連絡してください。');
   } finally {
@@ -733,6 +742,7 @@ function getUniversityDataApi() {
     const response = Sheets.Spreadsheets.Values.get(spreadsheetId, rangeName); // Sheets API を直接叩いて値を取得
     return response.values || [];
   } catch (e) {
+    logErrorToSheet('getUniversityDataApi', e.message, e.stack);
     console.error(e);
     throw new Error("API取得エラー: " + e.message);
   }
@@ -776,6 +786,7 @@ function getBatchSheetDataWithCache(requests) {
         cache.put(cacheKey, JSON.stringify(data), 21600); // 6時間
       });
     } catch (e) {
+      logErrorToSheet('getBatchSheetDataWithCache', e.message, e.stack);
       console.error('getBatchSheetDataWithCacheでエラー: ' + e);
       throw new Error("データの一括取得に失敗しました。");
     }
@@ -814,6 +825,7 @@ function getSheetDataApi(sheetName) {
     const response = Sheets.Spreadsheets.Values.get(spreadsheetId, rangeName);
     return response.values || [];
   } catch (e) {
+    logErrorToSheet('getSheetDataApi', e.message, e.stack);
     console.error(e);
     throw new Error("API取得エラー: " + e.message);
   }
@@ -964,6 +976,7 @@ function deleteMarkedRows() { // 削除フラグ付きを一括削除（再書�
       examDataSheet.getRange(1, 1, newValues.length, newValues[0].length).setValues(newValues);
     }
   } catch (e) {
+    logErrorToSheet('deleteMarkedRows', e.message, e.stack);
     console.error('deleteMarkedRowsでエラーまたはロックタイムアウト: ' + e);
     throw new Error('削除処理に失敗しました。時間をおいて再度お試しください。' + e.message);
   } finally {
@@ -1067,4 +1080,35 @@ function importUniversityData() {
   // シリアル番号の更新
   incrementUniversitySerial();
   Browser.msgBox("インポートが完了しました。");
+}
+
+// エラーログの記録
+function logErrorToSheet(type, message, detail) {
+  const lock = LockService.getScriptLock();
+  try {
+    // ログ記録も同時書き込みを避けるためロックを取得
+    lock.waitLock(5000); 
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(SHEET_NAMES.ERROR_LOG);
+    // シートが存在しない場合は作成
+    if (!sheet) {
+      sheet = ss.insertSheet(SHEET_NAMES.ERROR_LOG);
+      sheet.appendRow(['日時', 'ユーザー', '種類', 'メッセージ', '詳細（スタックトレース等）']);
+      sheet.setFrozenRows(1);
+    }
+    const userEmail = Session.getActiveUser().getEmail();
+    const timestamp = new Date();
+    sheet.appendRow([
+      timestamp,
+      userEmail,
+      type,
+      message,
+      detail
+    ]);
+  } catch (e) {
+    // ログ記録自体が失敗した場合はStackdriverにのみ記録
+    console.error('Failed to log error to sheet: ' + e.toString());
+  } finally {
+    lock.releaseLock();
+  }
 }

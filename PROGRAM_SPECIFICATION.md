@@ -1,6 +1,6 @@
 # プログラム仕様書
 
-[![Version](https://img.shields.io/badge/version-2.3.1-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.3.2-blue.svg)](./VERSION_CHANGES.md)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 [![For](https://img.shields.io/badge/対象-開発者-red.svg)](#)
 
@@ -99,8 +99,19 @@ juken-survey/
 | **設定** | `SETTINGS` | システム設定 |
 | **調査書交付願** | `PDF_TEMPLATE` | 帳票テンプレート |
 | **校内DB用** | `KOUNAI_DB` | エクスポート用 |
+| **エラーログ** | `ERROR_LOG` | **v2.3.2新規**: エラー情報記録用 |
 
 ### 3.2 主要シートのカラム定義
+
+#### エラーログ (`ERROR_LOG`)
+
+| 列 | カラム名 | 型 | 説明 |
+|:---:|:---|:---|:---|
+| A | 日時 | Date | エラー発生日時 |
+| B | ユーザー | String | エラー発生ユーザーのメールアドレス |
+| C | 種類 | String | エラーが発生した関数名 |
+| D | メッセージ | String | エラーメッセージ |
+| E | 詳細（スタックトレース等） | String | スタックトレースなどの詳細情報 |
 
 #### 学籍データ (`STUDENTS`)
 
@@ -313,6 +324,46 @@ sequenceDiagram
 | `queryDeleteMarkedRows()` | 論理削除済みデータを完全削除 |
 | `clearUniversityData()` | 大学データをクリア |
 | `incrementUniversitySerial()` | 大学データ変更時にシリアル番号を自動インクリメント |
+| `logErrorToSheet(type, message, detail)` | **v2.3.2新規**: エラー情報をスプレッドシートに記録 |
+
+### 4.5 エラーログ機能
+
+#### `logErrorToSheet(type, message, detail)`
+
+**v2.3.2新規**: エラー情報をスプレッドシートに記録する関数。
+
+```javascript
+function logErrorToSheet(type, message, detail) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000); // 同時書き込みを防止
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(SHEET_NAMES.ERROR_LOG);
+    
+    // シートが存在しない場合は作成
+    if (!sheet) {
+      sheet = ss.insertSheet(SHEET_NAMES.ERROR_LOG);
+      sheet.appendRow(['日時', 'ユーザー', '種類', 'メッセージ', '詳細（スタックトレース等）']);
+      sheet.setFrozenRows(1);
+    }
+    
+    const userEmail = Session.getActiveUser().getEmail();
+    const timestamp = new Date();
+    sheet.appendRow([timestamp, userEmail, type, message, detail]);
+  } catch (e) {
+    console.error('Failed to log error to sheet: ' + e.toString());
+  } finally {
+    lock.releaseLock();
+  }
+}
+```
+
+| 機能 | 説明 |
+|:---|:---|
+| **自動シート作成** | `ERROR_LOG` シートが存在しない場合に自動作成 |
+| **排他制御** | `LockService` で同時書き込みを防止 |
+| **詳細な記録** | 日時、ユーザー、関数名、メッセージ、スタックトレース |
+| **堅牢性** | ログ記録自体が失敗してもシステムは継続 |
 
 ---
 

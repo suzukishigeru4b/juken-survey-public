@@ -1,6 +1,6 @@
 # 受験校調査アプリ (Preferred School Survey System)
 
-[![Version](https://img.shields.io/badge/version-2.3.1-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.3.2-blue.svg)](./VERSION_CHANGES.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 
@@ -35,12 +35,17 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 
 ---
 
-## ✨ v2.3.1 新機能ハイライト
+## ✨ v2.3.2 新機能ハイライト
 
-> **2026年1月リリース** - 信頼性と保守性を強化！
+> **2026年1月リリース** - エラーログ機能で運用保守性を強化！
 
 | 改善項目 | 詳細 |
 |:---|:---|
+| 📊 **エラーログ機能** | `ERROR_LOG` シートに詳細なエラー情報を自動記録 |
+| 🔒 **排他制御** | `LockService` で同時書き込みを防止 |
+| 🐛 **デバッグ効率化** | 日時、ユーザー、スタックトレースで原因特定を容易化 |
+| 📋 **監査証跡** | 誰がいつどのようなエラーを発生させたかを記録 |
+| 🛠️ **全面的な適用** | 主要な全関数にエラーログ記録を実装 |
 | 🐛 **Base64デコード修正** | fetch() APIのData URIスキームエラーを解消 |
 | 🧹 **コード品質向上** | グローバル変数整理と関数モジュール化 |
 | 📋 **ハードコード値特定** | 設定外部化に向けた値のリストアップ |
