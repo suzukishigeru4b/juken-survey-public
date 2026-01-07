@@ -175,7 +175,7 @@ juken-survey/
 | [PROGRAM_SPECIFICATION.md](./PROGRAM_SPECIFICATION.md) | 開発者 | システム設計・API仕様 |
 | [TEACHER_MANUAL.md](./TEACHER_MANUAL.md) | 教員・管理者 | 操作手順・管理機能の使い方 |
 | [STUDENT_MANUAL.md](./STUDENT_MANUAL.md) | 生徒 | 受験校入力・調査書発行の手順 |
-| [VERSION_CHANGES.md](./VERSION_CHANGES.md) | 全員 | v2.0.0の変更点一覧 |
+| [VERSION_CHANGES.md](./VERSION_CHANGES.md) | 全員 | バージョンごとの変更点一覧 |
 
 ---
 
@@ -204,6 +204,7 @@ copies or substantial portions of the Software.
 **Made for Education**
 
 </div>
+
 
 
 
