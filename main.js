@@ -1,6 +1,6 @@
 /**
  * 受験校調査システム (Preferred school survey system)
- * Version 2.3.2
+ * Version 2.3.3
  * * Copyright (c) 2026 Shigeru Suzuki
  * * Released under the MIT License.
  * https://opensource.org/licenses/MIT
@@ -50,7 +50,8 @@ const STUDENT_DATA = {
   GRADE: 1,
   CLASS: 2,
   NUMBER: 3,
-  NAME: 4
+  NAME: 4,
+  REG_COUNT: 5
 };
 
 // 教員データ列定義
@@ -224,7 +225,7 @@ function getInitialData() {
     const requests = [
       { sheetName: SHEET_NAMES.SEL_KEITAI, range: `'${SHEET_NAMES.SEL_KEITAI}'!A1:A` },
       { sheetName: SHEET_NAMES.SEL_GOUHI, range: `'${SHEET_NAMES.SEL_GOUHI}'!A1:A` },
-      { sheetName: SHEET_NAMES.STUDENTS, range: `'${SHEET_NAMES.STUDENTS}'!A1:E` },
+      { sheetName: SHEET_NAMES.STUDENTS, range: `'${SHEET_NAMES.STUDENTS}'!A1:F` },
       { sheetName: SHEET_NAMES.TEACHERS, range: `'${SHEET_NAMES.TEACHERS}'!A1:B` },
       { sheetName: SHEET_NAMES.SETTINGS, range: `'${SHEET_NAMES.SETTINGS}'!A1:B` }
     ];
@@ -557,7 +558,10 @@ function sendExamData(strJuken, mailAddr = Session.getActiveUser().getEmail()) {
         values: dataToAdd
       }, spreadsheetId, range, { valueInputOption: 'USER_ENTERED' });
     }
-    // ===== STEP 5: 最新データを返却 =====
+    // ===== STEP 5: 登録数の更新 =====
+    const activeCount = examInputData.filter(row => isTrue(row[EXAM_DATA.DEL_FLAG]) !== true).length;
+    updateStudentRegCount(spreadsheetId, mailAddr, activeCount);
+    // ===== STEP 6: 最新データを返却 =====
     return getExamDataList(mailAddr);
   } catch (e) {
     logErrorToSheet('sendExamData', e.message, e.stack);
@@ -717,6 +721,27 @@ function validateInputData(data) {
       throw new Error(`No.${index + 1} の受験形態「${keitai}」は不正です。`);
     }
   });
+}
+// 生徒データの登録数を更新するヘルパー
+function updateStudentRegCount(spreadsheetId, mailAddr, count) {
+  try {
+    const rangeName = `'${SHEET_NAMES.STUDENTS}'!A:A`;
+    const response = Sheets.Spreadsheets.Values.get(spreadsheetId, rangeName);
+    const mailCol = (response.values || []).flat();
+    const rowIndex = mailCol.indexOf(mailAddr);
+    if (rowIndex > 0) {
+      const regCountCol = STUDENT_DATA.REG_COUNT + 1; // 1-indexed (F列 = 6)
+      const updateRange = `'${SHEET_NAMES.STUDENTS}'!F${rowIndex + 1}`;
+      Sheets.Spreadsheets.Values.update(
+        { values: [[count]] },
+        spreadsheetId,
+        updateRange,
+        { valueInputOption: 'USER_ENTERED' }
+      );
+    }
+  } catch (e) {
+    console.warn('登録数の更新に失敗しました:', e);
+  }
 }
 // 日付フォーマット変換ヘルパー
 function convertIfDate(data, format) {

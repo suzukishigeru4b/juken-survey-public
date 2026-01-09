@@ -1,6 +1,6 @@
 # プログラム仕様書
 
-[![Version](https://img.shields.io/badge/version-2.3.2-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.3.3-blue.svg)](./VERSION_CHANGES.md)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 [![For](https://img.shields.io/badge/対象-開発者-red.svg)](#)
 
@@ -122,6 +122,7 @@ juken-survey/
 | C | クラス | String | ✅ |
 | D | 出席番号 | Number | ✅ |
 | E | 氏名 | String | ✅ |
+| F | 登録数 | Number | - |
 
 #### 受験校DB (`JUKEN_DB`)
 
@@ -265,6 +266,7 @@ flowchart TD
 | **更新方式** | 差分更新（変更行のみ） |
 | **削除方式** | 論理削除（削除フラグ） |
 | **リトライ機能** | クライアント側でExponential Backoff対応 |
+| **登録数更新** | **v2.3.3**: データ保存完了時に「学籍データ」の登録数を自動更新 |
 
 ---
 
@@ -325,6 +327,7 @@ sequenceDiagram
 | `clearUniversityData()` | 大学データをクリア |
 | `incrementUniversitySerial()` | 大学データ変更時にシリアル番号を自動インクリメント |
 | `logErrorToSheet(type, message, detail)` | **v2.3.2新規**: エラー情報をスプレッドシートに記録 |
+| `updateStudentRegCount(sheetId, mail, count)` | **v2.3.3新規**: 生徒の登録数を更新 |
 
 ### 4.5 エラーログ機能
 
@@ -400,14 +403,9 @@ function pageLoaded() {
 
 頻繁にアクセスするDOM要素をキャッシュ。
 
-**v2.3.1での改良点:**
-- `dom` オブジェクトを `config` から独立させ、グローバル変数として配置
-- すべての `config.dom` 参照を `dom` に更新
-
 | グローバル変数 | 型 | 用途 |
 |:---|:---|:---|
 | `dom` | `Object` | DOM要素の参照を格納 |
-| `config` | `Object` | アプリケーション設定値を格納 |
 
 ---
 
@@ -438,14 +436,9 @@ function pageLoaded() {
 |:---|:---|
 | 保存先 | `localStorage` |
 | キー | `universityDataCache`, `universityDataTimestamp`, `universityCodeSerial` |
-| 有効期限 | 24時間 (`24 * 60 * 60 * 1000` ms) |
+| 有効期限 | 24時間 |
 | 圧縮形式 | gzip（サーバー側） |
 | データ形式 | Base64エンコード |
-
-**v2.3.1での改良点:**
-- `base64ToUint8ArrayAsync` 関数のエラーを修正
-- fetch() APIのData URIスキームからatob()方式に変更
-- 長いBase64文字列のデコード安定性向上
 
 ---
 
@@ -454,11 +447,6 @@ function pageLoaded() {
 #### `sendExamDataWithRetry()`
 
 フォームの入力値をサーバーに送信（リトライ機能付き）。
-
-**v2.3.1での改良点:**
-- 関数のモジュール化により可読性向上
-- 確認、UI初期化、データ収集、エラー処理を分割
-- `base64ToUint8ArrayAsync` のエラーを修正（fetch() API → atob()方式）
 
 ```mermaid
 flowchart TD

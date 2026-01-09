@@ -3,7 +3,7 @@
   //--------------------------------------------------------------------------------
   // グローバルの定義
   //--------------------------------------------------------------------------------
-  
+
   // アプリケーション設定 (Configuration)
   const arrDef = {
     STUDENT_DATA: {},
@@ -271,6 +271,10 @@
       option.value = student[arrDef.STUDENT_DATA.MAIL_ADDR];
       let strNum = ('0' + student[arrDef.STUDENT_DATA.NUMBER] + '：').slice(-3);
       option.textContent = strNum + student[arrDef.STUDENT_DATA.NAME];
+      const regCount = parseInt(student[arrDef.STUDENT_DATA.REG_COUNT], 10) || 0;
+      if (regCount === 0) {
+        option.classList.add('is-empty');
+      }
       selNumDiv.appendChild(option);
     });
   }
@@ -439,13 +443,13 @@
       // atobでBase64をバイナリ文字列にデコード
       const binaryString = atob(base64);
       const len = binaryString.length;
-      
+
       // バイナリ文字列をUint8Arrayに転記
       const bytes = new Uint8Array(len);
       for (let i = 0; i < len; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
-      
+
       return bytes;
     } catch (e) {
       throw new Error('Base64のデコードに失敗しました: ' + e.message);
@@ -1046,14 +1050,14 @@
 
   function collectExamData() {
     const examData = [];
-    
+
     for (let i = 0; i < config.examMaxInputCount; i++) {
       const rowData = createExamDataRow(i + 1);
       if (rowData) {
         examData.push(rowData);
       }
     }
-    
+
     return examData;
   }
 
@@ -1091,6 +1095,20 @@
     if (strJSON) {
       config.examDataList = JSON.parse(strJSON);
       setInputTable();
+      // 登録数を更新して生徒リストを再描画（教員モードのみ）
+      if (config.userRole === 'teacher') {
+        updateStudentRegCountClient(config.studentMailAddress, config.examDataList.length);
+        createStudentList();
+        setElementHidden(dom.inputSection, true); // 選択がリセットされるため入力テーブルを非表示
+      }
+    }
+  }
+
+  // クライアント側で生徒データの登録数を更新
+  function updateStudentRegCountClient(mailAddr, count) {
+    const student = config.allStudentsData.find(s => s[arrDef.STUDENT_DATA.MAIL_ADDR] === mailAddr);
+    if (student) {
+      student[arrDef.STUDENT_DATA.REG_COUNT] = count;
     }
   }
 

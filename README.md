@@ -1,6 +1,6 @@
 # 受験校調査アプリ (Preferred School Survey System)
 
-[![Version](https://img.shields.io/badge/version-2.3.2-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.3.3-blue.svg)](./VERSION_CHANGES.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 
@@ -11,7 +11,7 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 ## 📖 目次
 
 - [概要](#概要)
-- [v2.0.0 新機能ハイライト](#v200-新機能ハイライト)
+- [v2.3.3 新機能ハイライト](#v333-新機能ハイライト)
 - [機能一覧](#機能一覧)
 - [システム要件](#システム要件)
 - [セットアップ手順](#セットアップ手順)
@@ -35,12 +35,14 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 
 ---
 
-## ✨ v2.3.2 新機能ハイライト
+## ✨ v2.3.3 新機能ハイライト
 
-> **2026年1月リリース** - エラーログ機能で運用保守性を強化！
+> **2026年1月リリース** - 教員モードのUX強化とエラーログ機能による運用保守性向上！
 
 | 改善項目 | 詳細 |
 |:---|:---|
+| 👁️ **未入力生徒の可視化** | 教員モードで登録数0の生徒を色付き表示 |
+| 🔄 **保存後自動更新** | 受験校保存後に生徒リストの色分けを即時更新 |
 | 📊 **エラーログ機能** | `ERROR_LOG` シートに詳細なエラー情報を自動記録 |
 | 🔒 **排他制御** | `LockService` で同時書き込みを防止 |
 | 🐛 **デバッグ効率化** | 日時、ユーザー、スタックトレースで原因特定を容易化 |
@@ -55,8 +57,9 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 | 📱 **レスポンシブ** | モバイル向けテーブルのグリッド表示 |
 | 💾 **キャッシュ** | 大学データ(Client)と設定・マスタデータ(Server)のキャッシュ |
 | 🔐 **堅牢性** | null安全処理とバリデーション強化 |
-| 🚀 **高速保存** | 保存時のロック時間短縮と処理効率化 (v2.1.0) |
-| 🛡️ **堅牢性** | データ型・比較演算子の厳格化と不整合バグの修正 (v2.2.0) |
+| 🚀 **高速保存** | 保存時のロック時間短縮と処理効率化 |
+| 🛡️ **堅牢性** | データ型・比較演算子の厳格化と不整合バグの修正 |
+
 
 詳しくは [VERSION_CHANGES.md](./VERSION_CHANGES.md) をご覧ください。
 
