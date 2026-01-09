@@ -72,7 +72,7 @@
 | C | クラス | |
 | D | 出席番号 | |
 | E | 氏名 | |
-| F | 登録数 | システム自動更新（手動でヘッダー追加が必要） |
+| F | 登録数 | システム自動更新 |
 
 #### 職員データ
 
@@ -230,3 +230,4 @@ flowchart LR
 [README](./README.md) ｜ [生徒用マニュアル](./STUDENT_MANUAL.md) ｜ [プログラム仕様書](./PROGRAM_SPECIFICATION.md)
 
 </div>
+
