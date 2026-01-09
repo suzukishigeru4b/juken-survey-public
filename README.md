@@ -11,7 +11,7 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 ## 📖 目次
 
 - [概要](#概要)
-- [V2.3.3 新機能ハイライト](#v233-新機能ハイライト)
+- [V2.3.3 新機能ハイライト](#-v233-新機能ハイライト)
 - [機能一覧](#機能一覧)
 - [システム要件](#システム要件)
 - [セットアップ手順](#セットアップ手順)
@@ -208,5 +208,6 @@ copies or substantial portions of the Software.
 **Made for Education**
 
 </div>
+
 
 
