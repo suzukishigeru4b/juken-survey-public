@@ -67,19 +67,18 @@
     return String(val).toUpperCase() === 'TRUE';
   }
 
+  const UNIVERSITY_DATA_CACHE = {
+    dataKey: 'universityDataCache',
+    timestampKey: 'universityDataTimestamp',
+    serialKey: 'universityCodeSerial',
+    duration: 24 * 60 * 60 * 1000 // 24時間
+  };
+
   //================================================================================
   // キャッシュ関連(手動でキャッシュをクリア)
   //================================================================================
   function clearUniversityDataCache() {
-    try {
-      localStorage.removeItem('universityDataCache');
-      localStorage.removeItem('universityDataTimestamp');
-      //console.log('大学データのキャッシュをクリアしました');
-      return true;
-    } catch (e) {
-      console.warn('キャッシュのクリアに失敗しました:', e);
-      return false;
-    }
+    return clearCache(UNIVERSITY_DATA_CACHE);
   }
 
   //================================================================================
@@ -334,12 +333,7 @@
   const universityMap = new Map;
 
   async function getUniversityDataList() {
-    const cacheConfig = {
-      dataKey: 'universityDataCache',
-      timestampKey: 'universityDataTimestamp',
-      serialKey: 'universityCodeSerial',
-      duration: 24 * 60 * 60 * 1000 // 24時間
-    };    
+    const cacheConfig = UNIVERSITY_DATA_CACHE;
     if (await tryLoadFromCache(cacheConfig)) return; // キャッシュからデータ取得を試行
     else await loadFromServer(cacheConfig); // サーバーからデータ取得
   }
@@ -425,8 +419,10 @@
       localStorage.removeItem(config.dataKey);
       localStorage.removeItem(config.timestampKey);
       localStorage.removeItem(config.serialKey);
+      return true;
     } catch (e) {
       console.warn('キャッシュクリアに失敗:', e);
+      return false;
     }
   }
   /*

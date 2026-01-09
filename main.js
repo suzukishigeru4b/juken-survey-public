@@ -148,11 +148,17 @@ const CACHE_TARGET_SHEETS = [
 
 function onEdit(e) {
   if (!e) return;
+  // Simple trigger では Advanced Google Services(Sheets API) を利用できないため、
+  // インストール型トリガー(=FULL) のときのみキャッシュ更新を実行する。
+  if (e.authMode !== ScriptApp.AuthMode.FULL) return;
   checkAndUpdateCache(e.range.getSheet().getName());
 }
 
 function onChange(e) {
   if (!e) return;
+  // Simple trigger では Advanced Google Services(Sheets API) を利用できないため、
+  // インストール型トリガー(=FULL) のときのみキャッシュ更新を実行する。
+  if (e.authMode !== ScriptApp.AuthMode.FULL) return;
   const sheet = e.source.getActiveSheet();
   if (sheet) {
     checkAndUpdateCache(sheet.getName());
@@ -188,7 +194,15 @@ function incrementUniversitySerial() {
   }
   const serialCell = sheet.getRange('B5');
   const currentSerial = parseInt(serialCell.getValue()) || 0;
-  serialCell.setValue(currentSerial + 1);
+  const newSerial = currentSerial + 1;
+  serialCell.setValue(newSerial);
+  SpreadsheetApp.flush();
+  try {
+    warmUpCache(SHEET_NAMES.SETTINGS);
+  } catch (e) {
+    logErrorToSheet('warmUpCache(SETTINGS)', e.message, e.stack);
+    console.error('設定シートキャッシュ更新エラー: ' + e);
+  }
   return newSerial;
 }
 
@@ -1085,9 +1099,11 @@ function importUniversityData() {
 // エラーログの記録
 function logErrorToSheet(type, message, detail) {
   const lock = LockService.getScriptLock();
+  let hasLock = false;
   try {
     // ログ記録も同時書き込みを避けるためロックを取得
-    lock.waitLock(5000); 
+    lock.waitLock(5000);
+    hasLock = true;
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     let sheet = ss.getSheetByName(SHEET_NAMES.ERROR_LOG);
     // シートが存在しない場合は作成
@@ -1109,6 +1125,8 @@ function logErrorToSheet(type, message, detail) {
     // ログ記録自体が失敗した場合はStackdriverにのみ記録
     console.error('Failed to log error to sheet: ' + e.toString());
   } finally {
-    lock.releaseLock();
+    if (hasLock) {
+      lock.releaseLock();
+    }
   }
 }
