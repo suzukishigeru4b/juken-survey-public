@@ -1,6 +1,6 @@
 # 生徒用マニュアル
 
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](./VERSION_CHANGES.md)
 [![For](https://img.shields.io/badge/対象-生徒-green.svg)](#)
 
 > このアプリは、みなさんの大学受験状況（受験予定校・合否結果）を学校に提出し、調査書の発行を依頼するためのシステムです。

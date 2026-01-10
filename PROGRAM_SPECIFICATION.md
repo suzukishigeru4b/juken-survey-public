@@ -1,6 +1,6 @@
 # プログラム仕様書
 
-[![Version](https://img.shields.io/badge/version-2.3.3-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](./VERSION_CHANGES.md)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 [![For](https://img.shields.io/badge/対象-開発者-red.svg)](#)
 
@@ -88,18 +88,21 @@ juken-survey/
 
 ### 3.1 シート一覧
 
-| シート名 | 定数名 | 用途 |
+シート定義は `DATA_SHEETS` 定数オブジェクトで一元管理されています。
+
+| シート名 | 定数プロパティ | 用途 |
 |:---|:---|:---|
-| **学籍データ** | `STUDENTS` | 生徒マスタ |
-| **職員データ** | `TEACHERS` | 教員マスタ |
-| **受験校DB** | `JUKEN_DB` | トランザクションデータ |
-| **大学データ** | `DAIGAKU` | 大学コードマスタ |
-| **試験形態** | `SEL_KEITAI` | 選択肢マスタ |
-| **合否選択肢** | `SEL_GOUHI` | 選択肢マスタ |
-| **設定** | `SETTINGS` | システム設定 |
-| **調査書交付願** | `PDF_TEMPLATE` | 帳票テンプレート |
-| **校内DB用** | `KOUNAI_DB` | エクスポート用 |
-| **エラーログ** | `ERROR_LOG` | **v2.3.2新規**: エラー情報記録用 |
+| **学籍データ** | `DATA_SHEETS.STUDENTS` | 生徒マスタ |
+| **職員データ** | `DATA_SHEETS.TEACHERS` | 教員マスタ |
+| **受験校DB** | `DATA_SHEETS.JUKEN_DB` | トランザクションデータ |
+| **大学データ** | `DATA_SHEETS.DAIGAKU` | 大学コードマスタ |
+| **大学検索用** | `DATA_SHEETS.DAIGAKU_SEARCH` | `大学データ`の軽量版（参照のみ） |
+| **試験形態** | `DATA_SHEETS.SEL_KEITAI` | 選択肢マスタ |
+| **合否選択肢** | `DATA_SHEETS.SEL_GOUHI` | 選択肢マスタ |
+| **設定** | `DATA_SHEETS.SETTINGS` | システム設定 |
+| **調査書交付願** | `DATA_SHEETS.PDF_TEMPLATE` | 帳票テンプレート |
+| **校内DB用** | `DATA_SHEETS.KOUNAI_DB` | エクスポート用 |
+| **エラーログ** | `DATA_SHEETS.ERROR_LOG` | **v2.3.2新規**: エラー情報記録用 |
 
 ### 3.2 主要シートのカラム定義
 
@@ -123,6 +126,19 @@ juken-survey/
 | D | 出席番号 | Number | ✅ |
 | E | 氏名 | String | ✅ |
 | F | 登録数 | Number | - |
+
+#### 設定 (`SETTINGS`)
+
+システム全体の動作設定を行うシートです。A列に項目名、B列に値を入力します。
+
+| 行 | キー (A列) | 値 (B列) | 説明 |
+|:---:|:---|:---|:---|
+| 2 | ページタイトル | String | ブラウザのタイトルバーやヘッダーに表示される文字列 |
+| 3 | 最大登録件数 | Number | 生徒1人あたりが登録できる受験校の最大数 |
+| 4 | 入力許可 | Boolean | `TRUE`で入力可能、`FALSE`で閲覧のみ可（期間外制御用） |
+| 5 | 大学データSig | String | 大学データのバージョン管理用シリアル（自動更新） |
+| 6 | メール件名 | String | 調査書発行願メールの件名 |
+| 7 | メール本文 | String | 調査書発行願メールの本文テンプレート（改行可） |
 
 #### 受験校DB (`JUKEN_DB`)
 
@@ -317,9 +333,9 @@ sequenceDiagram
 |:---|:---|
 | `createData()` | 校内DB用データを生成 |
 | `importUniversityData()` | Benesseデータをインポート |
-| `getUniversityDataList()` | 大学コードマスタを取得（gzip圧縮対応） |
-| `getSheetDataApiWithCache(sheetName)` | シートデータを取得してキャッシュ |
-| `getBatchSheetDataWithCache(requests)` | 複数シートを一括取得（キャッシュ対応）|
+| `getUniversityDataList()` | 大学コードマスタを取得（gzip圧縮対応, `DAIGAKU_SEARCH`使用, サーバーキャッシュ除外） |
+| `getSheetDataApiWithCache(sheetDef)` | シートデータを取得してキャッシュ（引数は `DATA_SHEETS` のオブジェクト） |
+| `getBatchSheetDataWithCache(sheetDefs)` | 複数シートを一括取得（キャッシュ対応, 引数はオブジェクト配列）|
 | `warmUpCache(sheetName)` | 指定シートのキャッシュを更新 |
 | `warmUpAllCache()` | 全キャッシュを一括更新 |
 | `setupTriggers()` | キャッシュ更新トリガーを設定 |
@@ -401,11 +417,12 @@ function pageLoaded() {
 
 #### `cacheDomElements()`
 
-頻繁にアクセスするDOM要素をキャッシュ。
+頻繁にアクセスするDM要素をキャッシュ。
+`document.querySelectorAll('[id]')` を使用して、ページ内のIDを持つ全要素を `dom` オブジェクトに自動登録します。
 
 | グローバル変数 | 型 | 用途 |
 |:---|:---|:---|
-| `dom` | `Object` | DOM要素の参照を格納 |
+| `dom` | `Object` | DOM要素の参照を格納 (例: `dom.sendButton`) |
 
 ---
 
@@ -447,6 +464,7 @@ function pageLoaded() {
 #### `sendExamDataWithRetry()`
 
 フォームの入力値をサーバーに送信（リトライ機能付き）。
+**v2.4.0以降**: 通信処理は `runGoogleScript` (Promise化) と `runGoogleScriptWithRetry` (リトライ制御) に分離実装されています。
 
 ```mermaid
 flowchart TD
@@ -457,14 +475,16 @@ flowchart TD
     D -->|OK| E[ローディング表示]
     E --> F[フォーム値を収集]
     F --> G[JSON変換]
-    G --> H[サーバー送信]
-    H --> I{成功?}
-    I -->|Yes| J[成功メッセージ]
-    I -->|No| K{リトライ上限?}
-    K -->|未達| L[Exponential Backoff]
-    L --> M[待機]
-    M --> H
-    K -->|達成| N[エラーメッセージ]
+    G --> H[runGoogleScriptWithRetry呼び出し]
+    H --> I[runGoogleScript呼び出し]
+    I --> J[サーバー送信]
+    J --> K{成功?}
+    K -->|Yes| L[成功メッセージ]
+    K -->|No| M{リトライ上限?}
+    M -->|未達| N[Exponential Backoff]
+    N --> O[待機]
+    O --> I
+    M -->|達成| P[エラーメッセージ]
 ```
 
 ---

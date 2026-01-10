@@ -1,6 +1,6 @@
 # 受験校調査アプリ (Preferred School Survey System)
 
-[![Version](https://img.shields.io/badge/version-2.3.3-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](./VERSION_CHANGES.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 

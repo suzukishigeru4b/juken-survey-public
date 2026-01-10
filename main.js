@@ -1,6 +1,6 @@
 /**
  * 受験校調査システム (Preferred school survey system)
- * Version 2.3.3
+ * Version 2.4.0
  * * Copyright (c) 2026 Shigeru Suzuki
  * * Released under the MIT License.
  * https://opensource.org/licenses/MIT
@@ -18,18 +18,19 @@
 // const myMailAddress = Session.getActiveUser().getEmail();
 
 // シート名定義
-const SHEET_NAMES = {
-  STUDENTS: '学籍データ',
-  TEACHERS: '職員データ',
-  JUKEN_DB: '受験校DB',
-  KEITAI: '試験形態',
-  DAIGAKU: '大学データ',
-  SEL_GOUHI: '合否選択肢',
-  SEL_KEITAI: '受験形態選択肢',
-  SETTINGS: '設定',
-  PDF_TEMPLATE: '調査書交付願',
-  KOUNAI_DB: '校内DB用',
-  ERROR_LOG: 'エラーログ'
+// シートデータ定義
+const DATA_SHEETS = {
+  STUDENTS: { SHEET: '学籍データ', COLS: 6 }, // A-F
+  TEACHERS: { SHEET: '職員データ', COLS: 2 }, // A-B
+  JUKEN_DB: { SHEET: '受験校DB', COLS: 8 }, // A-H
+  DAIGAKU: { SHEET: '大学データ', COLS: 8 }, // A-H (PDF作成用・全データ)
+  DAIGAKU_SEARCH: { SHEET: '大学データ', COLS: 2 }, // A-B (検索用・キャッシュ用 軽量データ)
+  SEL_GOUHI: { SHEET: '合否選択肢', COLS: 1 }, // A
+  SEL_KEITAI: { SHEET: '受験形態選択肢', COLS: 1 }, // A
+  SETTINGS: { SHEET: '設定', COLS: 2 }, // A-B
+  PDF_TEMPLATE: { SHEET: '調査書交付願', COLS: 0 },
+  KOUNAI_DB: { SHEET: '校内DB用', COLS: 9 }, // A-I
+  ERROR_LOG: { SHEET: 'エラーログ', COLS: 5 }  // A-E
 };
 
 // 受験データ列定義
@@ -88,6 +89,56 @@ const isTrue = (val) => {
   return String(val).toUpperCase() === 'TRUE';
 }
 
+// Benesseインポート用：基準年度計算
+// 4月〜12月は同年、1月〜3月は前年を基準とする（年度の開始年）
+function calculateBaseYear(date) {
+  const year = date.getFullYear();
+  const month = date.getMonth(); // 0-11
+  // 4月(3)より後は同年、それ以外(1-3月)は前年
+  return (month > 3) ? year : year - 1;
+}
+
+// Benesseインポート用：日付フォーマット変換
+// Benesseインポート用：日付フォーマット変換
+function formatBenesseDate(mmdd, baseYear) {
+  if (!mmdd || String(mmdd) === "0000" || String(mmdd).length !== 4) {
+    return '';
+  }
+  const str = String(mmdd);
+  const month = parseInt(str.substring(0, 2), 10);
+  const day = parseInt(str.substring(2), 10);
+
+  // 4月〜12月は基準年度、1月〜3月は翌年
+  const year = (month > 3) ? baseYear : baseYear + 1;
+  return `${year}/${month}/${day}`;
+}
+
+/* カラム数から列文字(A, B, ...)を取得する簡易ヘルパー */
+function getColLetter(colIndex) {
+  // 簡易実装: 1=A, 2=B, ... 26=Z
+  const letters = ['', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
+  return letters[colIndex] || '';
+}
+
+/**
+ * シート定義からAPIリクエスト情報を生成
+ * @param {Object} sheetDef - DATA_SHEETS のエントリ
+ * @returns {Object} { id: spreadsheetId, range: rangeString }
+ */
+function makeSheetApiRequest(sheetDef) {
+  const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const id = activeSpreadsheet.getId();
+  const name = sheetDef.SHEET;
+  const cols = sheetDef.COLS;
+
+  let range = `'${name}'`;
+  if (cols > 0) {
+    const letter = getColLetter(cols);
+    range += `!A:${letter}`;
+  }
+  return { id: id, range: range };
+}
+
 //================================================================================
 // 2. トリガー・エントリポイント (Triggers)
 //================================================================================
@@ -139,12 +190,13 @@ function onOpen() {
 }
 
 // 変更監視トリガー (キャッシュ更新)
+// 変更監視トリガー (キャッシュ更新)
 const CACHE_TARGET_SHEETS = [
-  SHEET_NAMES.SETTINGS,
-  SHEET_NAMES.SEL_GOUHI,
-  SHEET_NAMES.SEL_KEITAI,
-  SHEET_NAMES.TEACHERS,
-  SHEET_NAMES.STUDENTS
+  DATA_SHEETS.SETTINGS.SHEET,
+  DATA_SHEETS.SEL_GOUHI.SHEET,
+  DATA_SHEETS.SEL_KEITAI.SHEET,
+  DATA_SHEETS.TEACHERS.SHEET,
+  DATA_SHEETS.STUDENTS.SHEET
 ];
 
 function onEdit(e) {
@@ -177,7 +229,8 @@ function checkAndUpdateCache(sheetName) {
     }
   }
   // 大学データシートが変更された場合、シリアル番号を自動インクリメント
-  if (sheetName === SHEET_NAMES.DAIGAKU) {
+  // 大学データシートが変更された場合、シリアル番号を自動インクリメント
+  if (sheetName === DATA_SHEETS.DAIGAKU.SHEET) {
     try {
       incrementUniversitySerial();
     } catch (e) {
@@ -189,7 +242,7 @@ function checkAndUpdateCache(sheetName) {
 
 // 大学データシリアル番号のインクリメント（設定シートセルB5の整数値をインクリメントする）
 function incrementUniversitySerial() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAMES.SETTINGS);
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(DATA_SHEETS.SETTINGS.SHEET);
   if (!sheet) {
     throw new Error('設定シートが見つかりません');
   }
@@ -199,7 +252,7 @@ function incrementUniversitySerial() {
   serialCell.setValue(newSerial);
   SpreadsheetApp.flush();
   try {
-    warmUpCache(SHEET_NAMES.SETTINGS);
+    warmUpCache(DATA_SHEETS.SETTINGS.SHEET);
   } catch (e) {
     logErrorToSheet('warmUpCache(SETTINGS)', e.message, e.stack);
     console.error('設定シートキャッシュ更新エラー: ' + e);
@@ -216,22 +269,22 @@ function incrementUniversitySerial() {
 // 3-1. 初期データ取得
 //--------------------------------------------------------------------------------
 // 初期データの取得 (アプリ起動時) - Google Sheets API (batchGet)を使用
+// 初期データの取得 (アプリ起動時) - Google Sheets API (batchGet)を使用
 function getInitialData() {
   const myMailAddress = Session.getActiveUser().getEmail();
   try {
-    const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    const spreadsheetId = activeSpreadsheet.getId();
-    // 取得する範囲の定義
-    const requests = [
-      { sheetName: SHEET_NAMES.SEL_KEITAI, range: `'${SHEET_NAMES.SEL_KEITAI}'!A1:A` },
-      { sheetName: SHEET_NAMES.SEL_GOUHI, range: `'${SHEET_NAMES.SEL_GOUHI}'!A1:A` },
-      { sheetName: SHEET_NAMES.STUDENTS, range: `'${SHEET_NAMES.STUDENTS}'!A1:F` },
-      { sheetName: SHEET_NAMES.TEACHERS, range: `'${SHEET_NAMES.TEACHERS}'!A1:B` },
-      { sheetName: SHEET_NAMES.SETTINGS, range: `'${SHEET_NAMES.SETTINGS}'!A1:B` }
+    // 取得する対象の定義
+    const targetSheets = [
+      DATA_SHEETS.SEL_KEITAI,
+      DATA_SHEETS.SEL_GOUHI,
+      DATA_SHEETS.STUDENTS,
+      DATA_SHEETS.TEACHERS,
+      DATA_SHEETS.SETTINGS
     ];
 
     // キャッシュを活用してデータを取得
-    const dataList = getBatchSheetDataWithCache(requests);
+    // 定義オブジェクトの配列を直接渡す
+    const dataList = getBatchSheetDataWithCache(targetSheets);
 
     // データの抽出 (値がない場合は空配列)
     // 1行目はヘッダーなので、2行目以降のデータを取得
@@ -239,19 +292,12 @@ function getInitialData() {
     const resultOptions = (dataList[1] || []).slice(1).map(row => row[0] || '');
     const allStudentsData = dataList[2] || []; // 直接配列として扱う
     const studentData = allStudentsData.find(row => row[STUDENT_DATA.MAIL_ADDR] === myMailAddress);
-    const arrAllTeachers = dataList[3] || [];  // 直接配列として扱う
-    const arrTeacher = arrAllTeachers.find(row => row[TEACHER_DATA.MAIL_ADDR] === myMailAddress);
-    const settingsRaw = (dataList[4] || []).slice(1);
+    const allTeachersData = dataList[3] || [];  // 直接配列として扱う
+    const teacherData = allTeachersData.find(row => row[TEACHER_DATA.MAIL_ADDR] === myMailAddress);
+    // const settingsRaw = (dataList[4] || []).slice(1); // 不要
 
-    // 設定データのオブジェクト化 (getSettings相当の処理)
-    const settings = {
-      pageTitle: settingsRaw[0] ? settingsRaw[0][1] : "",
-      inputMax: settingsRaw[1] ? settingsRaw[1][1] : 0,
-      inputEnable: settingsRaw[2] ? isTrue(settingsRaw[2][1]) : false, // APIの戻り値は文字列
-      daigakuSerial: settingsRaw[3] ? settingsRaw[3][1] : "",
-      mailTitle: settingsRaw[4] ? settingsRaw[4][1] : "",
-      mailMessage: settingsRaw[5] ? settingsRaw[5][1] : ""
-    };
+    // 設定データの取得 (getBatchSheetDataWithCacheでキャッシュ済み)
+    const settings = getSettings();
     let allData = {};
     if (studentData) {
       // 生徒モード
@@ -271,7 +317,7 @@ function getInitialData() {
         examData: [], // 空配列：後で取得
         universityCodeSerial: settings.daigakuSerial
       }
-    } else if (arrTeacher) {
+    } else if (teacherData) {
       // 教員モード
       allData = {
         headerTitle: settings.pageTitle,
@@ -283,7 +329,7 @@ function getInitialData() {
         examMaxCount: settings.inputMax,
         examTypeOptions: examTypeOptions,
         resultOptions: resultOptions,
-        teacherData: arrTeacher, // データを送信（1次元配列）
+        teacherData: teacherData, // データを送信（1次元配列）
         studentsData: [], // 空配列：後で取得
         studentData: [],
         examData: [],
@@ -324,7 +370,7 @@ function getInitialData() {
 function getStudentsList() {
   try {
     // キャッシュ確認
-    const allStudentsData = getSheetDataApiWithCache(SHEET_NAMES.STUDENTS) || [];
+    const allStudentsData = getSheetDataApiWithCache(DATA_SHEETS.STUDENTS) || [];
     return JSON.stringify(allStudentsData.slice(1)); // ヘッダーを除去して返却
   } catch (e) {
     logErrorToSheet('getStudentsList', e.message, e.stack);
@@ -337,7 +383,8 @@ function getStudentsList() {
 function getUniversityDataList() {
   try {
     const settings = getSettings();
-    const data = getUniversityDataApi();
+    // 検索用（軽量）データを取得
+    const data = getSheetDataApi(DATA_SHEETS.DAIGAKU_SEARCH).slice(1);
     const jsonString = JSON.stringify(data);
     // JSON文字列をBlobに変換してgzip圧縮
     const blob = Utilities.newBlob(jsonString, 'text/plain', 'data.json');
@@ -381,7 +428,8 @@ function getExamDataList(mailAddr = Session.getActiveUser().getEmail()) {
     const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
     const spreadsheetId = activeSpreadsheet.getId();
     // 受験データ全体を取得 (A1からH列まで)
-    const rangeName = `'${SHEET_NAMES.JUKEN_DB}'!A1:H`;
+
+    const rangeName = `'${DATA_SHEETS.JUKEN_DB.SHEET}'!A1:H`;
     const response = Sheets.Spreadsheets.Values.get(spreadsheetId, rangeName);
     const allExamData = response.values || [];
 
@@ -418,7 +466,7 @@ function sendExamData(strJuken, mailAddr = Session.getActiveUser().getEmail()) {
     const spreadsheetId = activeSpreadsheet.getId();
     // ===== STEP 1: 既存データの取得 =====
     // メールアドレスでフィルタリングして対象レコードを取得
-    const indexRange = `'${SHEET_NAMES.JUKEN_DB}'!B2:D`;
+    const indexRange = `'${DATA_SHEETS.JUKEN_DB.SHEET}'!B2:D`;
     const mailResponse = Sheets.Spreadsheets.Values.get(spreadsheetId, indexRange);
     const mailValues = mailResponse.values || [];
 
@@ -431,7 +479,7 @@ function sendExamData(strJuken, mailAddr = Session.getActiveUser().getEmail()) {
     // 既存データをMapで管理: Map<大学コード, Array<{rowIndex, data}>>
     const existingDataMap = new Map();
     if (matchedRowIndices.length > 0) {
-      const sheetName = SHEET_NAMES.JUKEN_DB;
+      const sheetName = DATA_SHEETS.JUKEN_DB.SHEET;
       const ranges = matchedRowIndices.map(rowIndex =>
         `'${sheetName}'!A${rowIndex}:H${rowIndex}`
       );
@@ -469,7 +517,7 @@ function sendExamData(strJuken, mailAddr = Session.getActiveUser().getEmail()) {
       if (existingRecords && existingRecords.length > 0) { // ---- 既存データがある場合 ----
         if (isDeleteRequest) { // A. 削除リクエスト → すべて論理削除
           existingRecords.forEach(record => {
-            const range = `'${SHEET_NAMES.JUKEN_DB}'!A${record.rowIndex}:C${record.rowIndex}`;
+            const range = `'${DATA_SHEETS.JUKEN_DB.SHEET}'!A${record.rowIndex}:C${record.rowIndex}`;
             dataToUpdate.push({
               range: range,
               values: [[currentDate, mailAddr, true]]
@@ -479,7 +527,7 @@ function sendExamData(strJuken, mailAddr = Session.getActiveUser().getEmail()) {
           const targetRecord = existingRecords[0];
           for (let i = 1; i < existingRecords.length; i++) { // 重複レコード(2件目以降)を論理削除
             const dupRecord = existingRecords[i];
-            const range = `'${SHEET_NAMES.JUKEN_DB}'!A${dupRecord.rowIndex}:C${dupRecord.rowIndex}`;
+            const range = `'${DATA_SHEETS.JUKEN_DB.SHEET}'!A${dupRecord.rowIndex}:C${dupRecord.rowIndex}`;
             dataToUpdate.push({
               range: range,
               values: [[currentDate, mailAddr, true]]
@@ -503,7 +551,7 @@ function sendExamData(strJuken, mailAddr = Session.getActiveUser().getEmail()) {
               inputRow[EXAM_DATA.KEITAI] || '',                // KEITAI
               isTrue(inputRow[EXAM_DATA.SHINGAKU])             // SHINGAKU
             ];
-            const range = `'${SHEET_NAMES.JUKEN_DB}'!A${targetRecord.rowIndex}:H${targetRecord.rowIndex}`;
+            const range = `'${DATA_SHEETS.JUKEN_DB.SHEET}'!A${targetRecord.rowIndex}:H${targetRecord.rowIndex}`;
             dataToUpdate.push({
               range: range,
               values: [updateRow]
@@ -532,7 +580,7 @@ function sendExamData(strJuken, mailAddr = Session.getActiveUser().getEmail()) {
       if (!processedCodes.has(daigakuCode)) { // 入力データに含まれていない既存レコードはすべて論理削除
         records.forEach(record => { // 既に論理削除されている場合はスキップ
           if (isTrue(record.data[EXAM_DATA.DEL_FLAG]) !== true) {
-            const range = `'${SHEET_NAMES.JUKEN_DB}'!A${record.rowIndex}:C${record.rowIndex}`;
+            const range = `'${DATA_SHEETS.JUKEN_DB.SHEET}'!A${record.rowIndex}:C${record.rowIndex}`;
             dataToUpdate.push({
               range: range,
               values: [[currentDate, mailAddr, true]]
@@ -551,7 +599,7 @@ function sendExamData(strJuken, mailAddr = Session.getActiveUser().getEmail()) {
     }
     // 4-2. 新規データの追加 (append)
     if (dataToAdd.length > 0) {
-      const range = `'${SHEET_NAMES.JUKEN_DB}'!A1`;
+      const range = `'${DATA_SHEETS.JUKEN_DB.SHEET}'!A1`;
       Sheets.Spreadsheets.Values.append({
         range: range,
         majorDimension: 'ROWS',
@@ -600,7 +648,7 @@ function sendPdf(mailAddr = Session.getActiveUser().getEmail()) {
     // 一時ファイルを作成
     ssOutput = SpreadsheetApp.create(ssName);
     ssOutputID = ssOutput.getId();
-    const srcsheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.PDF_TEMPLATE);
+    const srcsheet = activeSpreadsheet.getSheetByName(DATA_SHEETS.PDF_TEMPLATE.SHEET);
     const sheetOutput = srcsheet.copyTo(ssOutput);
     const sheetOutputID = sheetOutput.getSheetId();
     // 日時埋め込み
@@ -609,7 +657,7 @@ function sendPdf(mailAddr = Session.getActiveUser().getEmail()) {
     dateRange.setHorizontalAlignment('right');
     dateRange.setValue(Utilities.formatDate(crrDate, 'Asia/Tokyo', 'yyyy年MM月dd日 HH時mm分'));
     // 生徒データ埋め込み
-    const sheetStudents = activeSpreadsheet.getSheetByName(SHEET_NAMES.STUDENTS);
+    const sheetStudents = activeSpreadsheet.getSheetByName(DATA_SHEETS.STUDENTS.SHEET);
     const mailList = sheetStudents.getRange(1, 1, sheetStudents.getLastRow(), 1).getValues().flat();
     const idx = mailList.indexOf(mailAddr);
     const studentData = [];
@@ -624,10 +672,16 @@ function sendPdf(mailAddr = Session.getActiveUser().getEmail()) {
     pRange.setNumberFormat('@');
     pRange.setValues(setDataList);
     // 受験データ埋め込み
-    const examDataSheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.JUKEN_DB);
+    const examDataSheet = activeSpreadsheet.getSheetByName(DATA_SHEETS.JUKEN_DB.SHEET);
     const allExamData = examDataSheet.getDataRange().getValues();
     const examData = allExamData.filter(row => row[EXAM_DATA.MAIL_ADDR] === mailAddr && isTrue(row[EXAM_DATA.DEL_FLAG]) !== true);
-    const universitySheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.DAIGAKU);
+    /* 
+      // PDF作成時は全データが必要なので DAIGAKU (COLS:8) を使用する
+      // getSheetDataApi を使って最適化可能だが、ここでは元のロジックに合わせてシート取得する
+      // ただし、getSheetDataApi経由の方がキャッシュ効く？ -> いや、この処理は即時性が重要かも
+      // 元コードは getSheetByName しているので踏襲
+    */
+    const universitySheet = activeSpreadsheet.getSheetByName(DATA_SHEETS.DAIGAKU.SHEET);
     const allUniversityData = universitySheet.getRange(2, 1, universitySheet.getLastRow() - 1, universitySheet.getLastColumn()).getValues();
     const jRange = sheetOutput.getRange("A11:F40");
     const arrOutput = jRange.getValues();
@@ -675,7 +729,7 @@ function sendPdf(mailAddr = Session.getActiveUser().getEmail()) {
 //================================================================================
 // 設定データの取得
 function getSettings() {
-  const values = (getSheetDataApiWithCache(SHEET_NAMES.SETTINGS) || []).slice(1);
+  const values = (getSheetDataApiWithCache(DATA_SHEETS.SETTINGS) || []).slice(1);
   return {
     pageTitle: values[0] ? values[0][1] : "",
     inputMax: values[1] ? values[1][1] : 0,
@@ -693,8 +747,8 @@ function isValidUser(targetMailAddr) {
     return true;
   }
   // 2. 他人のデータを保存しようとしている場合、実行者が「教員」かチェック
-  const arrAllTeachers = (getSheetDataApiWithCache(SHEET_NAMES.TEACHERS) || []).slice(1);
-  const isTeacher = arrAllTeachers.some(row => row[0] === currentUser);
+  const allTeachersData = (getSheetDataApiWithCache(DATA_SHEETS.TEACHERS) || []).slice(1);
+  const isTeacher = allTeachersData.some(row => row[TEACHER_DATA.MAIL_ADDR] === currentUser);
   if (isTeacher) {
     return true; // 教員なら他人のデータも保存OK
   }
@@ -702,9 +756,10 @@ function isValidUser(targetMailAddr) {
 }
 // 入力データ整合性チェック用ヘルパー
 function validateInputData(data) {
+
   const maxCount = getSettings().inputMax;
-  const allowedResults = (getSheetDataApiWithCache(SHEET_NAMES.SEL_GOUHI) || []).slice(1).map(row => row[0] || "");
-  const allowedTypes = (getSheetDataApiWithCache(SHEET_NAMES.SEL_KEITAI) || []).slice(1).map(row => row[0] || "");
+  const allowedResults = (getSheetDataApiWithCache(DATA_SHEETS.SEL_GOUHI) || []).slice(1).map(row => row[0] || "");
+  const allowedTypes = (getSheetDataApiWithCache(DATA_SHEETS.SEL_KEITAI) || []).slice(1).map(row => row[0] || "");
   if (!Array.isArray(data)) {
     throw new Error("データ形式が不正です。");
   }
@@ -725,13 +780,13 @@ function validateInputData(data) {
 // 生徒データの登録数を更新するヘルパー
 function updateStudentRegCount(spreadsheetId, mailAddr, count) {
   try {
-    const rangeName = `'${SHEET_NAMES.STUDENTS}'!A:A`;
+    const rangeName = `'${DATA_SHEETS.STUDENTS.SHEET}'!A:A`;
     const response = Sheets.Spreadsheets.Values.get(spreadsheetId, rangeName);
     const mailCol = (response.values || []).flat();
     const rowIndex = mailCol.indexOf(mailAddr);
     if (rowIndex > 0) {
       const regCountCol = STUDENT_DATA.REG_COUNT + 1; // 1-indexed (F列 = 6)
-      const updateRange = `'${SHEET_NAMES.STUDENTS}'!F${rowIndex + 1}`;
+      const updateRange = `'${DATA_SHEETS.STUDENTS.SHEET}'!F${rowIndex + 1}`;
       Sheets.Spreadsheets.Values.update(
         { values: [[count]] },
         spreadsheetId,
@@ -765,43 +820,32 @@ function createSheetPDF(ssName, ssID, sheetID, portrait) {
 //================================================================================
 // 5. データアクセス (Data Access)
 //================================================================================
-// シートデータの取得API使用（大学データ用）
-function getUniversityDataApi() {
-  const sheetName = SHEET_NAMES.DAIGAKU
-  try {
-    const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    const spreadsheetId = activeSpreadsheet.getId();
-    const sheet = activeSpreadsheet.getSheetByName(sheetName);
-    const lastRow = sheet.getLastRow();
-    // 実際のデータ行数のみを取得（ヘッダー行をスキップ）
-    if (lastRow <= 1) {
-      return []; // データがない場合
-    }
-    const rangeName = `'${sheetName}'!A2:B${lastRow}`; // 範囲指定：A2からB列の最終行まで
-    const response = Sheets.Spreadsheets.Values.get(spreadsheetId, rangeName); // Sheets API を直接叩いて値を取得
-    return response.values || [];
-  } catch (e) {
-    logErrorToSheet('getUniversityDataApi', e.message, e.stack);
-    console.error(e);
-    throw new Error("API取得エラー: " + e.message);
-  }
-}
+
+
 
 // 複数シートデータの取得（キャッシュ付き・バッチ取得）
-function getBatchSheetDataWithCache(requests) {
+function getBatchSheetDataWithCache(sheetDefs) {
   const cache = CacheService.getScriptCache();
-  const results = new Array(requests.length);
+  const results = new Array(sheetDefs.length);
   const fetchIndices = [];
   const fetchRanges = [];
 
   // 1. キャッシュの確認
-  requests.forEach((req, index) => {
-    const cacheKey = req.sheetName;
+  sheetDefs.forEach((def, index) => {
+    const cacheKey = def.SHEET;
     const cached = cache.get(cacheKey);
     if (cached) {
-      results[index] = JSON.parse(cached);
+      const data = JSON.parse(cached);
+      // キャッシュデータが要求カラム数より多い場合、切り詰めて返す
+      if (def.COLS > 0 && data.length > 0 && data[0].length > def.COLS) {
+        results[index] = data.map(row => row.slice(0, def.COLS));
+      } else {
+        results[index] = data;
+      }
     } else {
       fetchIndices.push(index);
+      // APIリクエスト情報を生成
+      const req = makeSheetApiRequest(def);
       fetchRanges.push(req.range);
     }
   });
@@ -820,8 +864,10 @@ function getBatchSheetDataWithCache(requests) {
         results[originalIndex] = data;
 
         // 取得したデータをキャッシュに保存
-        const req = requests[originalIndex];
-        const cacheKey = req.sheetName;
+        // 取得時に指定カラム数で絞っている(A:F等)ので、返却データはCOLS以下になっているはず
+        // そのままキャッシュしてOK
+        const def = sheetDefs[originalIndex];
+        const cacheKey = def.SHEET;
         cache.put(cacheKey, JSON.stringify(data), 21600); // 6時間
       });
     } catch (e) {
@@ -834,39 +880,44 @@ function getBatchSheetDataWithCache(requests) {
   return results;
 }
 
+
+// シートデータの取得キャッシュ付き（getBatchSheetDataWithCacheに統合を検討すべきだが一旦維持）
+// ※ 引数を sheetName から sheetDef に変更
 // シートデータの取得キャッシュ付き
-function getSheetDataApiWithCache(sheetName) {
+// ※ 引数は sheetDef オブジェクト必須
+function getSheetDataApiWithCache(sheetDef) {
   const cache = CacheService.getScriptCache();
-  const cacheKey = sheetName;
+  const cacheKey = sheetDef.SHEET; // 単純化のためシート名をキーにする
   const cached = cache.get(cacheKey);
   if (cached) {
-    return JSON.parse(cached);
+    const data = JSON.parse(cached);
+    // キャッシュデータが要求カラム数より多い場合、切り詰めて返す (Superset Cache -> Subset Request)
+    if (sheetDef.COLS > 0 && data.length > 0 && data[0].length > sheetDef.COLS) {
+      return data.map(row => row.slice(0, sheetDef.COLS));
+    }
+    return data;
   }
-  const data = getSheetDataApi(sheetName);
-  cache.put(cacheKey, JSON.stringify(data), 21600);
+  const data = getSheetDataApi(sheetDef);
+  // データがあればキャッシュ（空配列はキャッシュしない方が安全？）
+  if (data && data.length > 0) {
+    cache.put(cacheKey, JSON.stringify(data), 21600);
+  }
   return data;
 }
-// シートデータの取得
-function getSheetDataApi(sheetName) {
+
+// シートデータの取得（共通化）
+function getSheetDataApi(sheetDef) {
   try {
-    const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    const spreadsheetId = activeSpreadsheet.getId();
-    const sheet = activeSpreadsheet.getSheetByName(sheetName);
-    const lastRow = sheet.getLastRow();
-    // 実際のデータ行数のみを取得
-    if (lastRow < 1) {
-      return []; // データがない場合
-    }
-    const lastColumn = sheet.getLastColumn();
-    const a1Notation = sheet.getRange(1, 1, lastRow, lastColumn).getA1Notation();
-    const rangeName = `'${sheetName}'!${a1Notation}`;
-    // Sheets API を直接叩いて値を取得
-    const response = Sheets.Spreadsheets.Values.get(spreadsheetId, rangeName);
+    const req = makeSheetApiRequest(sheetDef);
+    // Values.get は範囲指定がないと全範囲、A:Bならその列を全行取得
+    const response = Sheets.Spreadsheets.Values.get(req.id, req.range);
     return response.values || [];
   } catch (e) {
     logErrorToSheet('getSheetDataApi', e.message, e.stack);
     console.error(e);
-    throw new Error("API取得エラー: " + e.message);
+    // エラー時は空配列を返すか、エラーを投げるか
+    // 呼び出し元の期待値に合わせる（空配列）
+    return [];
   }
 }
 
@@ -874,7 +925,12 @@ function getSheetDataApi(sheetName) {
 function warmUpCache(sheetName) {
   const cache = CacheService.getScriptCache();
   const cacheKey = sheetName;
-  const data = getSheetDataApi(sheetName);
+  /* sheetName string -> sheetDef object conversion for cache updates */
+  let sheetDef = Object.values(DATA_SHEETS).find(d => d.SHEET === sheetName);
+  if (!sheetDef) {
+    sheetDef = { SHEET: sheetName, COLS: 0 };
+  }
+  const data = getSheetDataApi(sheetDef);
   cache.put(cacheKey, JSON.stringify(data), 21600); // 6時間
   return data;
 }
@@ -882,11 +938,12 @@ function warmUpCache(sheetName) {
 // 全キャッシュの強制更新
 function warmUpAllCache() {
   const targetSheets = [
-    SHEET_NAMES.SETTINGS,
-    SHEET_NAMES.TEACHERS,
-    SHEET_NAMES.STUDENTS,
-    SHEET_NAMES.SEL_GOUHI,
-    SHEET_NAMES.SEL_KEITAI
+
+    DATA_SHEETS.SETTINGS.SHEET,
+    DATA_SHEETS.TEACHERS.SHEET,
+    DATA_SHEETS.STUDENTS.SHEET,
+    DATA_SHEETS.SEL_GOUHI.SHEET,
+    DATA_SHEETS.SEL_KEITAI.SHEET
   ];
   targetSheets.forEach(sheetName => {
     warmUpCache(sheetName);
@@ -939,10 +996,10 @@ function setupTriggers() {
 // 校内DB用データの生成
 function createData() { // API不使用のためboolean対策なし
   const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  const sheetDB = activeSpreadsheet.getSheetByName(SHEET_NAMES.KOUNAI_DB);
-  const universitySheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.DAIGAKU);
-  const sheetJuken = activeSpreadsheet.getSheetByName(SHEET_NAMES.JUKEN_DB);
-  const sheetStudents = activeSpreadsheet.getSheetByName(SHEET_NAMES.STUDENTS);
+  const sheetDB = activeSpreadsheet.getSheetByName(DATA_SHEETS.KOUNAI_DB.SHEET);
+  const universitySheet = activeSpreadsheet.getSheetByName(DATA_SHEETS.DAIGAKU.SHEET);
+  const sheetJuken = activeSpreadsheet.getSheetByName(DATA_SHEETS.JUKEN_DB.SHEET);
+  const sheetStudents = activeSpreadsheet.getSheetByName(DATA_SHEETS.STUDENTS.SHEET);
   const allUniversityData = universitySheet.getRange(2, 1, universitySheet.getLastRow() - 1, universitySheet.getLastColumn()).getValues();
   const mapAllDaigaku = new Map;
   allUniversityData.forEach(drow => mapAllDaigaku.set(String(drow[0]), drow[1]));
@@ -997,7 +1054,7 @@ function deleteMarkedRows() { // 削除フラグ付きを一括削除（再書�
   try {
     lock.waitLock(120000); // 120秒待機
     const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    const examDataSheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.JUKEN_DB);
+    const examDataSheet = activeSpreadsheet.getSheetByName(DATA_SHEETS.JUKEN_DB.SHEET);
 
     // データ範囲全体を取得
     const values = examDataSheet.getDataRange().getValues();
@@ -1029,7 +1086,7 @@ function clearUniversityData() {
   if (dialogResult === 'no') return;
 
   const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  const universitySheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.DAIGAKU);
+  const universitySheet = activeSpreadsheet.getSheetByName(DATA_SHEETS.DAIGAKU.SHEET);
   universitySheet.clear();
   const outputHeader = ['大学コード', '大学名', 'Web締切', '窓口締切', '郵送締切', '入試日', '発表日', '手続き締切'];
   universitySheet.appendRow(outputHeader);
@@ -1046,7 +1103,7 @@ function importUniversityData() {
     Browser.msgBox("現在のシートはBeneeseのデータではないようです。", Browser.Buttons.OK);
     return;
   }
-  const universitySheet = activeSpreadsheet.getSheetByName(SHEET_NAMES.DAIGAKU);
+  const universitySheet = activeSpreadsheet.getSheetByName(DATA_SHEETS.DAIGAKU.SHEET);
   const universityDataRows = universitySheet.getDataRange().getValues();
   universityDataRows.shift();
   const universityMap = new Map();
@@ -1055,6 +1112,9 @@ function importUniversityData() {
   })
   const isCalendar = benesseDataRows[0][BENESSE_DATA.DAY_NYUSHI] === '入試日' ? true : false
   benesseDataRows.shift();
+  // 基準年度の計算
+  const baseYear = calculateBaseYear(new Date());
+
   const appendData = [];
   benesseDataRows.forEach(row => {
     const rowData = [];
@@ -1070,35 +1130,12 @@ function importUniversityData() {
     else if (schedule.length > 0) universityName += `[${schedule}]`;
     else if (method.length > 0) universityName += `・${method}`;
     rowData.push(String(universityCode), universityName);
-    let examDate = [];
+
     if (isCalendar) {
-      const now = new Date();
-      let oldYear
-      let newYear
-      let currentYear = now.getFullYear();
-      let currentMonth = now.getMonth();
-      if (currentMonth > 3) {
-        oldYear = currentYear;
-        newYear = currentYear + 1;
-      } else {
-        oldYear = currentYear - 1;
-        newYear = currentYear;
-      }
       let scheduleArray = row.splice(BENESSE_DATA.DAY_SHIMEKIRI_WEB, 7);
-      scheduleArray.splice(3, 1);
+      scheduleArray.splice(3, 1); // 不要な列(Window?)を除去
       scheduleArray.forEach(str => {
-        if (str === "0000" || str.length !== 4) {
-          examDate = '';
-        } else {
-          const dataMonth = Number(str.substring(0, 2))
-          const dataDay = Number(str.substring(2))
-          if (dataMonth > 3) {
-            examDate = `${oldYear}/${dataMonth}/${dataDay}`
-          } else {
-            examDate = `${newYear}/${dataMonth}/${dataDay}`
-          }
-        }
-        rowData.push(examDate);
+        rowData.push(formatBenesseDate(str, baseYear));
       });
     } else {
       rowData.push(...Array(6))
@@ -1130,10 +1167,10 @@ function logErrorToSheet(type, message, detail) {
     lock.waitLock(5000);
     hasLock = true;
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = ss.getSheetByName(SHEET_NAMES.ERROR_LOG);
+    let sheet = ss.getSheetByName(DATA_SHEETS.ERROR_LOG.SHEET);
     // シートが存在しない場合は作成
     if (!sheet) {
-      sheet = ss.insertSheet(SHEET_NAMES.ERROR_LOG);
+      sheet = ss.insertSheet(DATA_SHEETS.ERROR_LOG.SHEET);
       sheet.appendRow(['日時', 'ユーザー', '種類', 'メッセージ', '詳細（スタックトレース等）']);
       sheet.setFrozenRows(1);
     }

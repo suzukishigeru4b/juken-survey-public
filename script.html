@@ -109,6 +109,15 @@
   }
 
   function cacheDomElements() {
+    // idを持つすべての要素を取得し、domオブジェクトにマッピング
+    // ※パフォーマンスへの影響は軽微ですが、不要な要素も含んでしまう点に注意が必要
+    const elements = document.querySelectorAll('[id]');
+    elements.forEach(el => {
+      dom[el.id] = el;
+    });
+  }
+  /*
+  function cacheDomElements() {
     const ids = [
       "confirmDialogTitle", "confirmDialogMessage", "confirmDialog",
       "confirmDialogButtonYes", "confirmDialogButtonNo", "headerTitle",
@@ -126,7 +135,7 @@
       if (el) dom[id] = el;
     });
   }
-
+  */
   //--------------------------------------------------------------------------------
   // エントリーポイント
   //--------------------------------------------------------------------------------
@@ -969,6 +978,32 @@
    * @param {Object} options - リトライ設定 (任意)
    * @returns {Promise<any>} 成功時の戻り値
    */
+  /**
+ * google.script.run を Promise化するヘルパー関数
+ * @param {string} funcName - 呼び出すサーバー側関数名
+ * @param {Array} args - 関数に渡す引数の配列
+ * @returns {Promise<any>}
+ */
+  function runGoogleScript(funcName, args) {
+    return new Promise((resolve, reject) => {
+      const runner = google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject);
+      if (typeof runner[funcName] !== 'function') {
+        reject(new Error(`Function '${funcName}' not found in google.script.run`));
+        return;
+      }
+      runner[funcName](...args);
+    });
+  }
+
+  /**
+   * runGoogleScript に自動リトライ機能を追加したラッパー関数
+   * @param {string} funcName - 呼び出すサーバー側関数名 (例: 'saveExamDataList')
+   * @param {Array} args - 関数に渡す引数の配列 (例: [jsonString, mail])
+   * @param {Object} options - リトライ設定 (任意)
+   * @returns {Promise<any>} 成功時の戻り値
+   */
   async function runGoogleScriptWithRetry(funcName, args = [], options = {}) {
     // デフォルト設定
     const {
@@ -981,17 +1016,7 @@
     while (true) {
       try {
         // google.script.run を Promise でラップして実行
-        return await new Promise((resolve, reject) => {
-          const runner = google.script.run
-            .withSuccessHandler(resolve)
-            .withFailureHandler(reject);
-          // 関数名で動的に呼び出し、引数を展開して渡す
-          if (typeof runner[funcName] !== 'function') {
-            reject(new Error(`Function '${funcName}' not found in google.script.run`));
-            return;
-          }
-          runner[funcName](...args);
-        });
+        return await runGoogleScript(funcName, args);
       } catch (error) {
         attempt++;
         // リトライ上限に達したらエラーを投げて終了
