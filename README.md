@@ -11,7 +11,7 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 ## 📖 目次
 
 - [概要](#概要)
-- [v2.3.3 新機能ハイライト](#v-233-新機能ハイライト)
+- [v2.3.3 新機能ハイライト](#-v240-新機能ハイライト)
 - [機能一覧](#機能一覧)
 - [システム要件](#システム要件)
 - [セットアップ手順](#セットアップ手順)
@@ -35,7 +35,7 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 
 ---
 
-## ✨ v2.3.3 新機能ハイライト
+## ✨ v2.4.0 新機能ハイライト
 
 > **2026年1月リリース** - 教員モードのUX強化とエラーログ機能による運用保守性向上！
 
@@ -179,7 +179,7 @@ juken-survey/
 | [PROGRAM_SPECIFICATION.md](./PROGRAM_SPECIFICATION.md) | 開発者 | システム設計・API仕様 |
 | [TEACHER_MANUAL.md](./TEACHER_MANUAL.md) | 教員・管理者 | 操作手順・管理機能の使い方 |
 | [STUDENT_MANUAL.md](./STUDENT_MANUAL.md) | 生徒 | 受験校入力・調査書発行の手順 |
-| [VERSION_CHANGES.md](./VERSION_CHANGES.md) | 全員 | v2.0.0の変更点一覧 |
+| [VERSION_CHANGES.md](./VERSION_CHANGES.md) | 全員 | v2.4.0の変更点一覧 |
 
 ---
 
@@ -208,3 +208,4 @@ copies or substantial portions of the Software.
 **Made for Education**
 
 </div>
+
