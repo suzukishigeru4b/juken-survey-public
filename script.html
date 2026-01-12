@@ -109,8 +109,7 @@
   }
 
   function cacheDomElements() {
-    // idを持つすべての要素を取得し、domオブジェクトにマッピング
-    // ※パフォーマンスへの影響は軽微ですが、不要な要素も含んでしまう点に注意が必要
+    // 不要な要素も含んでしまう点に注意
     const elements = document.querySelectorAll('[id]');
     elements.forEach(el => {
       dom[el.id] = el;
@@ -150,7 +149,7 @@
       .withSuccessHandler(onInitialDataReceived)
       .withFailureHandler(error => {
         console.error(error);
-        showProgressDialog(false); // くるくるを消す
+        showProgressDialog(false);
         confirmAsync("エラー", "処理に失敗しました。<br>時間をおいて再度試すか、先生に連絡してください。<br>詳細: " + error.message);
       })
       .getInitialData();
@@ -438,8 +437,8 @@
       return false;
     }
   }
-  /*
   // Base64をUint8Arrayに変換 fetch APIのData URIスキームを利用
+  /*
   async function base64ToUint8ArrayAsync(base64) {
     // dataスキームを使ってBase64をBlobとして読み込む
     const res = await fetch("data:application/octet-stream;base64," + base64);
@@ -458,7 +457,6 @@
       for (let i = 0; i < len; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
-
       return bytes;
     } catch (e) {
       throw new Error('Base64のデコードに失敗しました: ' + e.message);
@@ -603,9 +601,7 @@
   function setInputTable() {
     // テーブル本体
     const template = dom.examRowTemplate;
-
     const tableBody = document.createElement('tbody');
-
     for (let i = 0; i < config.examMaxInputCount; i++) {
       const rowClone = template.content.cloneNode(true);
       const hasData = i < config.examDataList.length;
@@ -623,20 +619,17 @@
       shingakuRadio.id = 'proceed' + (i + 1);
       searchBtn.id = 'searchButton' + (i + 1);
       clearBtn.id = 'deleteButton' + (i + 1);
-
       dom['universityCode' + (i + 1)] = dcode;
       dom['universityName' + (i + 1)] = dname;
       dom['proceed' + (i + 1)] = shingakuRadio;
       dom['searchButton' + (i + 1)] = searchBtn;
       dom['deleteButton' + (i + 1)] = clearBtn;
-
       if (hasData) {
         dcode.value = jukenItem[arrDef.EXAM_DATA.DAIGAKU_CODE] || '';
         dname.textContent = jukenItem[arrDef.EXAM_DATA.DAIGAKU_NAME] || '';
         keitaiCell.appendChild(createExamTypeSelect(i, jukenItem[arrDef.EXAM_DATA.KEITAI] || ''));
         gouhiCell.appendChild(createResultSelect(i, jukenItem[arrDef.EXAM_DATA.GOUHI] || ''));
-        // サーバサイドから渡されたbool値は文字列
-        if (isTrue(jukenItem[arrDef.EXAM_DATA.SHINGAKU]) === true) {
+        if (isTrue(jukenItem[arrDef.EXAM_DATA.SHINGAKU]) === true) { // サーバサイドから渡されたbool値は文字列
           shingakuRadio.checked = true;
           selectedProceedRadioId = shingakuRadio.id;
         }
@@ -968,9 +961,7 @@
   //--------------------------------------------------------------------------------
   // データ送信
   //--------------------------------------------------------------------------------
-  //================================================================================
   // 通信リトライ制御用ヘルパー (Exponential Backoff)
-  //================================================================================
   /**
    * google.script.run を Promise化し、自動リトライ機能を追加したラッパー関数
    * @param {string} funcName - 呼び出すサーバー側関数名 (例: 'saveExamDataList')

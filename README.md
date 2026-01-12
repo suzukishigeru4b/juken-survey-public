@@ -11,7 +11,7 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 ## 📖 目次
 
 - [概要](#概要)
-- [v2.4.0 新機能ハイライト](#-v240-新機能ハイライト)
+- [v2.0.0 新機能ハイライト](#v200-新機能ハイライト)
 - [機能一覧](#機能一覧)
 - [システム要件](#システム要件)
 - [セットアップ手順](#セットアップ手順)
@@ -37,29 +37,18 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 
 ## ✨ v2.4.0 新機能ハイライト
 
-> **2026年1月リリース** - 教員モードのUX強化とエラーログ機能による運用保守性向上！
+> **2025年12月リリース** - パフォーマンスと信頼性を大幅に強化！
 
 | 改善項目 | 詳細 |
 |:---|:---|
-| 👁️ **未入力生徒の可視化** | 教員モードで登録数0の生徒を色付き表示 |
-| 🔄 **保存後自動更新** | 受験校保存後に生徒リストの色分けを即時更新 |
-| 📊 **エラーログ機能** | `ERROR_LOG` シートに詳細なエラー情報を自動記録 |
-| 🔒 **排他制御** | `LockService` で同時書き込みを防止 |
-| 🐛 **デバッグ効率化** | 日時、ユーザー、スタックトレースで原因特定を容易化 |
-| 📋 **監査証跡** | 誰がいつどのようなエラーを発生させたかを記録 |
-| 🛠️ **全面的な適用** | 主要な全関数にエラーログ記録を実装 |
-| 🐛 **Base64デコード修正** | fetch() APIのData URIスキームエラーを解消 |
-| 🧹 **コード品質向上** | グローバル変数整理と関数モジュール化 |
-| 📋 **ハードコード値特定** | 設定外部化に向けた値のリストアップ |
-| 🎨 **モダンUI** | CSS変数によるデザインシステム導入 |
-| 🌙 **ダークモード** | `prefers-color-scheme` 対応 |
-| ⚡ **パフォーマンス** | Sheets API `batchGet` による高速初期化 |
-| 📱 **レスポンシブ** | モバイル向けテーブルのグリッド表示 |
+| 📦 **圧縮転送** | 大学データのgzip圧縮+Base64転送で通信効率化 |
+| 🔄 **シリアル管理** | 大学データキャッシュのシリアル番号による自動更新 |
+| 🔁 **リトライ処理** | Exponential Backoffによる自動リトライ機能 |
+| ⚡ **即時反映** | シート編集時のサーバーキャッシュ自動更新 |
+| 🗑️ **自動削除** | 論理削除レコードの定期的完全削除 |
+| 🔥 **ウォームアップ** | 3時間ごとのサーバーキャッシュ自動更新 |
 | 💾 **キャッシュ** | 大学データ(Client)と設定・マスタデータ(Server)のキャッシュ |
-| 🔐 **堅牢性** | null安全処理とバリデーション強化 |
-| 🚀 **高速保存** | 保存時のロック時間短縮と処理効率化 |
-| 🛡️ **堅牢性** | データ型・比較演算子の厳格化と不整合バグの修正 |
-
+| 🛡️ **堅牢性** | データ型・比較演算子の厳格化と不整合バグの修正 (v2.2.0) |
 
 詳しくは [VERSION_CHANGES.md](./VERSION_CHANGES.md) をご覧ください。
 
@@ -179,7 +168,7 @@ juken-survey/
 | [PROGRAM_SPECIFICATION.md](./PROGRAM_SPECIFICATION.md) | 開発者 | システム設計・API仕様 |
 | [TEACHER_MANUAL.md](./TEACHER_MANUAL.md) | 教員・管理者 | 操作手順・管理機能の使い方 |
 | [STUDENT_MANUAL.md](./STUDENT_MANUAL.md) | 生徒 | 受験校入力・調査書発行の手順 |
-| [VERSION_CHANGES.md](./VERSION_CHANGES.md) | 全員 | v2.4.0の変更点一覧 |
+| [VERSION_CHANGES.md](./VERSION_CHANGES.md) | 全員 | v2.0.0の変更点一覧 |
 
 ---
 
@@ -188,7 +177,7 @@ juken-survey/
 [MIT License](https://opensource.org/licenses/MIT)
 
 ```
-Copyright (c) 2026 Shigeru Suzuki
+Copyright (c) 2025 Shigeru Suzuki
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -208,5 +197,3 @@ copies or substantial portions of the Software.
 **Made for Education**
 
 </div>
-
-
