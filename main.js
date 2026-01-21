@@ -1,6 +1,6 @@
 /**
  * 受験校調査システム (Preferred school survey system)
- * Version 2.4.0
+ * Version 2.4.2
  * * Copyright (c) 2026 Shigeru Suzuki
  * * Released under the MIT License.
  * https://opensource.org/licenses/MIT
@@ -99,27 +99,35 @@ function calculateBaseYear(date) {
 }
 
 // Benesseインポート用：日付フォーマット変換
-// Benesseインポート用：日付フォーマット変換
-function formatBenesseDate(mmdd, baseYear) {
+function formatBenesseDate(mmdd, baseYear) { // baseYearは4桁の年度
   if (!mmdd || String(mmdd) === "0000" || String(mmdd).length !== 4) {
     return '';
   }
   const str = String(mmdd);
   const month = parseInt(str.substring(0, 2), 10);
   const day = parseInt(str.substring(2), 10);
-
-  // 4月〜12月は基準年度、1月〜3月は翌年
+  // 4月〜12月は年度、1月〜3月は年度+1
   const year = (month > 3) ? baseYear : baseYear + 1;
   return `${year}/${month}/${day}`;
 }
 
-/* カラム数から列文字(A, B, ...)を取得する簡易ヘルパー */
+// カラム数から列文字(A, B, ..., Z, AA, AB, AC, ..., ZZ, AAA, AAB, ...）を取得するヘルパー
+function getColLetter(n) {
+  let column = "";
+  while (n > 0) {
+    let remainder = (n - 1) % 26;
+    column = String.fromCharCode(65 + remainder) + column;
+    n = Math.trunc((n - remainder) / 26);
+  }
+  return column;
+}
+/*
 function getColLetter(colIndex) {
   // 簡易実装: 1=A, 2=B, ... 26=Z
   const letters = ['', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
   return letters[colIndex] || '';
 }
-
+*/
 /**
  * シート定義からAPIリクエスト情報を生成
  * @param {Object} sheetDef - DATA_SHEETS のエントリ
@@ -635,7 +643,7 @@ function sendExamData(strJuken, mailAddr = Session.getActiveUser().getEmail()) {
 //--------------------------------------------------------------------------------
 // 3-4. PDF作成・メール送信
 //--------------------------------------------------------------------------------
-// PDF作成・メール送信 (調査書交付願)
+// PDF作成・メール送信 (調査書交付願) 頻度の低い操作なので時間がかかってもよいことにする。getValues()を使用
 function sendPdf(mailAddr = Session.getActiveUser().getEmail()) {
   let ssOutput = null;
   let ssOutputID = null;
@@ -820,8 +828,6 @@ function createSheetPDF(ssName, ssID, sheetID, portrait) {
 //================================================================================
 // 5. データアクセス (Data Access)
 //================================================================================
-
-
 
 // 複数シートデータの取得（キャッシュ付き・バッチ取得）
 function getBatchSheetDataWithCache(sheetDefs) {

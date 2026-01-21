@@ -68,17 +68,16 @@
   }
 
   const UNIVERSITY_DATA_CACHE = {
-    dataKey: 'universityDataCache',
-    timestampKey: 'universityDataTimestamp',
-    serialKey: 'universityCodeSerial',
+    cacheName: 'university-data-v1',
+    cacheKey: (serial) => `/university-data?serial=${serial}`,
     duration: 24 * 60 * 60 * 1000 // 24時間
   };
 
   //================================================================================
   // キャッシュ関連(手動でキャッシュをクリア)
   //================================================================================
-  function clearUniversityDataCache() {
-    return clearCache(UNIVERSITY_DATA_CACHE);
+  async function clearUniversityDataCache() {
+    return await clearCache(UNIVERSITY_DATA_CACHE);
   }
 
   //================================================================================
@@ -352,12 +351,24 @@
 
   async function tryLoadFromCache(conf) {
     try {
-      const cachedData = localStorage.getItem(conf.dataKey);
-      const cachedTimestamp = localStorage.getItem(conf.timestampKey);
-      const cachedSerial = localStorage.getItem(conf.serialKey);
-      if (!isValidCache(cachedData, cachedTimestamp, cachedSerial, conf)) {
+      const cacheKey = conf.cacheKey(config.universityCodeSerial);
+      const cache = await caches.open(conf.cacheName);
+      const response = await cache.match(cacheKey);
+      if (!response) {
         return false;
       }
+      // タイムスタンプの検証
+      const cachedTimestamp = response.headers.get('X-Cache-Timestamp');
+      if (!cachedTimestamp) {
+        return false;
+      }
+      const age = Date.now() - parseInt(cachedTimestamp, 10);
+      if (age >= conf.duration) {
+        // 有効期限切れ
+        await cache.delete(cacheKey);
+        return false;
+      }
+      const cachedData = await response.text();
       const decompressed = await decompressCachedData(cachedData);
       updateLoadingState('大学データ読込中（キャッシュ）');
       onUniversityDataReceived(decompressed);
@@ -368,28 +379,29 @@
     }
   }
 
-  function isValidCache(data, timestamp, serial, conf) {
-    if (!data || !timestamp || !serial) return false;
-    const isCurrentSerial = String(serial) === String(config.universityCodeSerial);
-    const age = Date.now() - parseInt(timestamp);
-    const isFresh = age < conf.duration;
-    return isCurrentSerial && isFresh;
-  }
-
   async function decompressCachedData(cachedData) {
-    const compressedData = await base64ToUint8ArrayAsync(cachedData);
+    // サーバーからの応答がJSON文字列の場合はパース
+    let base64Data = cachedData;
+    if (typeof cachedData === 'string' && cachedData.startsWith('"')) {
+      try {
+        base64Data = JSON.parse(cachedData);
+      } catch (e) {
+        // パース失敗時はそのまま使用
+      }
+    }
+    const compressedData = await base64ToUint8ArrayAsync(base64Data);
     return await decompressGzipAsync(compressedData);
   }
 
-  async function loadFromServer(config) {
+  async function loadFromServer(conf) {
     updateLoadingState('大学データ取得中...');
     try {
       const response = await fetchUniversityDataFromServer(); // サーバから取得したbase64
-      await saveToCache(response, config);
+      await saveToCache(response, conf);
       const decompressed = await decompressCachedData(response);
       onUniversityDataReceived(decompressed);
     } catch (e) {
-      handleServerError(e, config);
+      handleServerError(e, conf);
     }
   }
 
@@ -404,11 +416,39 @@
 
   async function saveToCache(response, conf) {
     try {
-      localStorage.setItem(conf.dataKey, response);
-      localStorage.setItem(conf.timestampKey, Date.now().toString());
-      localStorage.setItem(conf.serialKey, config.universityCodeSerial);
+      const cacheKey = conf.cacheKey(config.universityCodeSerial);
+      const cache = await caches.open(conf.cacheName);
+      // カスタムヘッダーにタイムスタンプを含めてResponseを作成
+      const headers = new Headers({
+        'Content-Type': 'text/plain',
+        'X-Cache-Timestamp': Date.now().toString()
+      });
+      const cacheResponse = new Response(response, { headers });
+      await cache.put(cacheKey, cacheResponse);
+      // 古いキャッシュをクリーンアップ
+      await cleanupOldCaches(conf);
     } catch (e) {
       console.warn('キャッシュ保存に失敗:', e);
+    }
+  }
+
+  async function cleanupOldCaches(conf) {
+    try {
+      const cache = await caches.open(conf.cacheName);
+      const keys = await cache.keys();
+      const currentSerialParam = `serial=${config.universityCodeSerial}`;
+
+      const deletions = keys.map(request => {
+        // キャッシュキー（URL）に現在のシリアルパラメータが含まれていない場合は削除
+        if (!request.url.includes(currentSerialParam)) {
+          console.log('古いキャッシュを削除:', request.url);
+          return cache.delete(request);
+        }
+        return Promise.resolve();
+      });
+      await Promise.all(deletions);
+    } catch (e) {
+      console.warn('キャッシュのクリーンアップに失敗:', e);
     }
   }
 
@@ -426,11 +466,11 @@
     confirmAsync("エラー", "大学データの読み込みに失敗しました。<br>ページを再読み込みしてください。<br>詳細: " + error.message);
   }
 
-  function clearCache(config) {
+  async function clearCache(conf) {
     try {
-      localStorage.removeItem(config.dataKey);
-      localStorage.removeItem(config.timestampKey);
-      localStorage.removeItem(config.serialKey);
+      const cacheKey = conf.cacheKey(config.universityCodeSerial);
+      const cache = await caches.open(conf.cacheName);
+      await cache.delete(cacheKey);
       return true;
     } catch (e) {
       console.warn('キャッシュクリアに失敗:', e);
