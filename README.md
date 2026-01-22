@@ -1,6 +1,6 @@
 # 受験校調査アプリ (Preferred School Survey System)
 
-[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.4.2-blue.svg)](./VERSION_CHANGES.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 
@@ -11,7 +11,6 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 ## 📖 目次
 
 - [概要](#概要)
-- [v2.0.0 新機能ハイライト](#v200-新機能ハイライト)
 - [機能一覧](#機能一覧)
 - [システム要件](#システム要件)
 - [セットアップ手順](#セットアップ手順)
@@ -35,20 +34,35 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 
 ---
 
-## ✨ v2.4.0 新機能ハイライト
+## ✨ v2.4.2 新機能ハイライト
 
-> **2025年12月リリース** - パフォーマンスと信頼性を大幅に強化！
+> **2026年1月リリース** - キャッシュシステム刷新とコードリファクタリングによる品質向上！
+
+### 🆕 v2.4.2 の改善点
 
 | 改善項目 | 詳細 |
 |:---|:---|
-| 📦 **圧縮転送** | 大学データのgzip圧縮+Base64転送で通信効率化 |
-| 🔄 **シリアル管理** | 大学データキャッシュのシリアル番号による自動更新 |
-| 🔁 **リトライ処理** | Exponential Backoffによる自動リトライ機能 |
-| ⚡ **即時反映** | シート編集時のサーバーキャッシュ自動更新 |
-| 🗑️ **自動削除** | 論理削除レコードの定期的完全削除 |
-| 🔥 **ウォームアップ** | 3時間ごとのサーバーキャッシュ自動更新 |
-| 💾 **キャッシュ** | 大学データ(Client)と設定・マスタデータ(Server)のキャッシュ |
-| 🛡️ **堅牢性** | データ型・比較演算子の厳格化と不整合バグの修正 (v2.2.0) |
+| 💾 **Cache API 移行** | 大学データキャッシュを `localStorage` から `Cache API` に変更、容量制限を回避 |
+| 🔑 **シリアル番号キャッシュキー** | データ更新時の自動キャッシュ無効化を実現 |
+| ⏰ **タイムスタンプ管理** | `X-Cache-Timestamp` ヘッダーで24時間有効期限を正確に管理 |
+
+### v2.4.0 の改善点
+
+| 改善項目 | 詳細 |
+|:---|:---|
+| 🏗️ **サーバーサイドリファクタリング** | `DATA_SHEETS` 定数でシート定義を集中管理、`getSheetDataApiWithCache` を標準化 |
+| 🧹 **クライアントサイドリファクタリング** | DOMキャッシュ自動化、通信処理の責務分離（Promise + リトライ制御） |
+
+### v2.3.3 までの改善点
+
+| 改善項目 | 詳細 |
+|:---|:---|
+| 👁️ **未入力生徒の可視化** | 教員モードで登録数0の生徒を色付き表示 |
+| 📊 **エラーログ機能** | `ERROR_LOG` シートに詳細なエラー情報を自動記録 |
+| 🐛 **Base64デコード修正** | fetch() APIのData URIスキームエラーを解消 |
+| 🎨 **モダンUI** | CSS変数・ダークモード・レスポンシブ対応 |
+| ⚡ **パフォーマンス** | Sheets API `batchGet`・キャッシュ戦略による高速化 |
+| 🔐 **堅牢性** | null安全処理・排他制御・データ型厳格化 |
 
 詳しくは [VERSION_CHANGES.md](./VERSION_CHANGES.md) をご覧ください。
 
@@ -177,7 +191,7 @@ juken-survey/
 [MIT License](https://opensource.org/licenses/MIT)
 
 ```
-Copyright (c) 2025 Shigeru Suzuki
+Copyright (c) 2026 Shigeru Suzuki
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
