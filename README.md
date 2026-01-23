@@ -1,6 +1,6 @@
 # 受験校調査アプリ (Preferred School Survey System)
 
-[![Version](https://img.shields.io/badge/version-2.4.2-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.4.4-blue.svg)](./VERSION_CHANGES.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 
@@ -34,11 +34,20 @@ Google Apps Script (GAS) と Google スプレッドシートを使用した、**
 
 ---
 
-## ✨ v2.4.2 新機能ハイライト
+## ✨ v2.4.4 新機能ハイライト
 
-> **2026年1月リリース** - キャッシュシステム刷新とコードリファクタリングによる品質向上！
+> **2026年1月リリース** - UI/UXの改善により、さらに使いやすくなりました！
 
-### 🆕 v2.4.2 の改善点
+### 🆕 v2.4.4 の改善点
+
+| 改善項目 | 詳細 |
+|:---|:---|
+| 🧲 **Sticky Header** | `position: sticky` により操作ボタンが常時表示されるように変更 |
+| ⏳ **初期表示制御** | データ読み込み中のちらつき防止と誤操作防止 |
+| ⚡ **検索最適化** | デバウンス処理(800ms)により検索のレスポンス向上 |
+| 📍 **スクロール保持** | 検索画面遷移時のスクロール位置を記憶・復元 |
+
+### v2.4.2 の改善点
 
 | 改善項目 | 詳細 |
 |:---|:---|

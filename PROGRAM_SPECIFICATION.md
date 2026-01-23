@@ -1,6 +1,6 @@
 # プログラム仕様書
 
-[![Version](https://img.shields.io/badge/version-2.4.2-blue.svg)](./VERSION_CHANGES.md)
+[![Version](https://img.shields.io/badge/version-2.4.4-blue.svg)](./VERSION_CHANGES.md)
 [![Platform](https://img.shields.io/badge/platform-Google%20Apps%20Script-4285F4.svg)](https://developers.google.com/apps-script)
 [![For](https://img.shields.io/badge/対象-開発者-red.svg)](#)
 
@@ -444,7 +444,7 @@ function pageLoaded() {
 | 関数 | 説明 |
 |:---|:---|
 | `searchUniversityCode(row)` | 検索ダイアログを表示 |
-| `searchKeyword()` | インクリメンタルサーチを実行 |
+| `searchKeyword()` | インクリメンタルサーチを実行（デバウンス対応） |
 | `getUniversityDataList()` | 大学データを取得（gzip圧縮対応） |
 
 **キャッシュ仕様:**
