@@ -87,6 +87,10 @@
     element.classList.toggle('is-hidden', flag);
   }
 
+  function setButtonForStudent(element, flag) {
+    element.classList.toggle('button-area-space-between', flag);
+  }
+
   function setPdfButtonDisabled(flag) {
     document.querySelectorAll('.button-pdf').forEach(btn => btn.disabled = flag);
   }
@@ -114,26 +118,7 @@
       dom[el.id] = el;
     });
   }
-  /*
-  function cacheDomElements() {
-    const ids = [
-      "confirmDialogTitle", "confirmDialogMessage", "confirmDialog",
-      "confirmDialogButtonYes", "confirmDialogButtonNo", "headerTitle",
-      "currentUserName", "classSelection", "studentNumberSelection",
-      "progressDialogMessageContainer", "inputTableContainer", "progressDialog", "statusMessage",
-      "sendFormButton1", "sendFormButton2", "issueReportButton1", "issueReportButton2",
-      "searchMessage", "searchTableContainer", "searchButton", "keywordInput", "moveLeftButton",
-      "moveRightButton", "cancelButton", "searchBackground", "searchBody",
-      "examRowTemplate", "sendFormButton1Message", "sendFormButton2Message",
-      "displayCountTotal", "displayCountRange", "inputBackground",
-      "selectorSection", "inputSection", "classSelectionContainer", "targetStudentName"
-    ];
-    ids.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) dom[id] = el;
-    });
-  }
-  */
+
   //--------------------------------------------------------------------------------
   // エントリーポイント
   //--------------------------------------------------------------------------------
@@ -141,8 +126,10 @@
     cacheDomElements();
     window.onbeforeunload = null;
     setDialogSpinner(" 初期データ取得中・・・");
-    setElementHidden(dom.selectorSection, true)
-    setElementHidden(dom.inputSection, true)
+    //setElementHidden(dom.selectorSection, true);
+    setElementHidden(dom.studentSelectorContainer, true);
+    setElementHidden(dom.inputSection, true);
+    setElementHidden(dom.buttonArea, true);
     showProgressDialog(true);
     google.script.run
       .withSuccessHandler(onInitialDataReceived)
@@ -174,10 +161,11 @@
     if (config.userRole === 'teacher') {
       if (dom.currentUserName) dom.currentUserName.textContent = "【教員モード】" + config.teacherData[1];
       disableReportButton(true);
-      setElementHidden(dom.selectorSection, true);
+      setElementHidden(dom.studentSelectorContainer, true);
       setElementHidden(dom.inputSection, true);
       setDialogSpinner("【教員モード】生徒一覧取得中・・・");
       setDialogBackdrop(dom.progressDialog, false);
+      setButtonForStudent(dom.buttonArea, false);
       google.script.run // 生徒一覧を非同期で取得
         .withSuccessHandler(studentsJSON => {
           showProgressDialog(false);
@@ -193,6 +181,7 @@
         })
         .getStudentsList();
     } else if (allData.userRole === 'student') {
+      setButtonForStudent(dom.buttonArea, true);
       setDialogBackdrop(dom.progressDialog, false);
       setDialogSpinner("受験校データ取得中...");
       config.inputEnable = allData.inputEnable;
@@ -203,7 +192,7 @@
       }
       config.studentMailAddress = config.currentStudentData[arrDef.STUDENT_DATA.MAIL_ADDR];
       setStudentName("targetStudentName");
-      setElementHidden(dom.selectorSection, true);
+      setElementHidden(dom.studentSelectorContainer, true);
       setElementHidden(dom.inputSection, false);
       setInputTable(); // 空のテーブルを先に表示
       google.script.run // 受験データを非同期で取得
@@ -231,8 +220,9 @@
   // 教員ページ生徒選択
   //--------------------------------------------------------------------------------
   function showSelector() {
-    setElementHidden(dom.selectorSection, false);
+    setElementHidden(dom.studentSelectorContainer, false);
     setElementHidden(dom.studentNumberSelection, true);
+    setElementHidden(dom.buttonArea, false);
     const classes = Array.from(new Set(config.allStudentsData.map(arr => arr[arrDef.STUDENT_DATA.CLASS])));
     classes.sort(); // クラス名でソート
     createClassSelector(classes);
@@ -257,6 +247,7 @@
 
   function createStudentList() { // 選択されたクラスの生徒一覧生成
     setElementHidden(dom.inputSection, true);
+    disableReportButton(true);
     const selClassId = dom.classSelection;
     const selClass = selClassId.value;
     const students = config.allStudentsData.filter(row => String(row[arrDef.STUDENT_DATA.CLASS]) === String(selClass));
@@ -291,14 +282,16 @@
       if (status.isItemChanged && !await confirmAsync("確認", "変更を保存せずに移動してよろしいですか")) {
         return;
       }
+      disableReportButton(true);
       const selectEl = dom.studentNumberSelection;
       const mailAddr = selectEl.value;
       if (mailAddr.length === 0) {
+        setElementHidden(dom.inputSection, true)
         return;
       }
       config.currentStudentData = config.allStudentsData.find(row => row[0] === mailAddr)
       config.studentMailAddress = mailAddr;
-      setStudentName("targetStudentName");
+      //setStudentName("targetStudentName");
       getExamDataList()
     } catch (e) {
       console.error("error in handleStudentSelect", e);
@@ -581,9 +574,7 @@
     });
     // 受験校テーブルのボタン
     dom.sendFormButton1.addEventListener("click", sendExamDataWithRetry);
-    dom.sendFormButton2.addEventListener("click", sendExamDataWithRetry);
     dom.issueReportButton1.addEventListener("click", requestReport);
-    dom.issueReportButton2.addEventListener("click", requestReport);
     // searchtable全体にリスナーを設定
     const searchTableDiv = dom.searchTableContainer;
 
@@ -624,21 +615,18 @@
 
   function disableReportButton(flag) {
     dom.issueReportButton1.disabled = flag;
-    dom.issueReportButton2.disabled = flag;
-
   }
   function disableSendButton(flag) {
     dom.sendFormButton1.disabled = flag;
-    dom.sendFormButton2.disabled = flag;
   }
 
   function setSendMessage(text) {
     dom.sendFormButton1Message.textContent = text;
-    dom.sendFormButton2Message.textContent = text;
   }
 
   // 入力用テーブル生成
   function setInputTable() {
+    setElementHidden(dom.buttonArea, false);
     // テーブル本体
     const template = dom.examRowTemplate;
     const tableBody = document.createElement('tbody');
@@ -1002,19 +990,6 @@
   // データ送信
   //--------------------------------------------------------------------------------
   // 通信リトライ制御用ヘルパー (Exponential Backoff)
-  /**
-   * google.script.run を Promise化し、自動リトライ機能を追加したラッパー関数
-   * @param {string} funcName - 呼び出すサーバー側関数名 (例: 'saveExamDataList')
-   * @param {Array} args - 関数に渡す引数の配列 (例: [jsonString, mail])
-   * @param {Object} options - リトライ設定 (任意)
-   * @returns {Promise<any>} 成功時の戻り値
-   */
-  /**
- * google.script.run を Promise化するヘルパー関数
- * @param {string} funcName - 呼び出すサーバー側関数名
- * @param {Array} args - 関数に渡す引数の配列
- * @returns {Promise<any>}
- */
   function runGoogleScript(funcName, args) {
     return new Promise((resolve, reject) => {
       const runner = google.script.run
@@ -1028,13 +1003,7 @@
     });
   }
 
-  /**
-   * runGoogleScript に自動リトライ機能を追加したラッパー関数
-   * @param {string} funcName - 呼び出すサーバー側関数名 (例: 'saveExamDataList')
-   * @param {Array} args - 関数に渡す引数の配列 (例: [jsonString, mail])
-   * @param {Object} options - リトライ設定 (任意)
-   * @returns {Promise<any>} 成功時の戻り値
-   */
+  //runGoogleScript に自動リトライ機能を追加したラッパー関数
   async function runGoogleScriptWithRetry(funcName, args = [], options = {}) {
     // デフォルト設定
     const {
@@ -1106,14 +1075,12 @@
 
   function collectExamData() {
     const examData = [];
-
     for (let i = 0; i < config.examMaxInputCount; i++) {
       const rowData = createExamDataRow(i + 1);
       if (rowData) {
         examData.push(rowData);
       }
     }
-
     return examData;
   }
 
@@ -1188,10 +1155,8 @@
     config.examDataList = JSON.parse(strJSON);
     showProgressDialog(false);
     disableReportButton(false);
-    //setElementHidden("selectorSection", true);
     setElementHidden(dom.inputSection, false);
     setInputTable();
-    //setInputVisibility("visible");
     if (status.isUniversityCodeLoading === false) disableSearchButton(false);
   }
 
@@ -1221,6 +1186,5 @@
   // エントリーポイント
   //--------------------------------------------------------------------------------
   window.onload = pageLoaded;
-
 
 </script>

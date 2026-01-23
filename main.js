@@ -1,6 +1,6 @@
 /**
  * 受験校調査システム (Preferred school survey system)
- * Version 2.4.2
+ * Version 2.4.4
  * * Copyright (c) 2026 Shigeru Suzuki
  * * Released under the MIT License.
  * https://opensource.org/licenses/MIT
